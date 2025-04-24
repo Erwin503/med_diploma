@@ -1,79 +1,67 @@
 import express from "express";
 import { authenticateToken } from "../middleware/authMiddleware";
 import { checkRole } from "../middleware/checkRole";
-import * as authController from "../controllers/authController";
-import * as adminController from "../controllers/adminController";
+
+// Импортируем из authController
+import {
+  signup,
+  login,
+  logout,
+  getUserProfile,
+  updateUserProfile,
+  deleteUserProfile,
+} from "../controllers/authController";
+
+// Импортируем из adminController
+import {
+  getAllUsers,
+  getUserById,
+  updateUserByAdmin,
+  deleteUserByAdmin,
+  assignRoleToUser,
+} from "../controllers/adminController";
 
 const router = express.Router();
 
-// ----------------
-// Authentication
-// ----------------
+// --- Auth routes ---
+router.post("/signup", signup);
+router.post("/login", login);
+router.post("/logout", authenticateToken, logout);
 
-// Регистрация
-router.post("/signup", authController.signup);
+router.get("/profile", authenticateToken, getUserProfile);
+router.put("/profile", authenticateToken, updateUserProfile);
+router.delete("/profile", authenticateToken, deleteUserProfile);
 
-// Вход
-router.post("/login", authController.login);
-
-// Выход
-router.post("/logout", authenticateToken, authController.logout);
-
-// ----------------
-// Profile (для всех авторизованных)
-// ----------------
-
-// Просмотр своего профиля
-router.get("/profile", authenticateToken, authController.getUserProfile);
-
-// Обновление своего профиля
-router.put("/profile", authenticateToken, authController.updateUserProfile);
-
-// Удаление своего аккаунта
-router.delete("/profile", authenticateToken, authController.deleteUserProfile);
-
-// ----------------
-// Admin: управление пользователями
-// ----------------
-
-// Список пользователей (local_admin, super_admin)
+// --- Admin routes ---
 router.get(
   "/users",
   authenticateToken,
   checkRole(["local_admin", "super_admin"]),
-  adminController.getAllUsers
+  getAllUsers
 );
-
-// Просмотр пользователя по ID (local_admin, super_admin)
 router.get(
   "/users/:id",
   authenticateToken,
   checkRole(["local_admin", "super_admin"]),
-  adminController.getUserById
+  getUserById
 );
-
-// Обновление пользователя (local_admin, super_admin)
 router.put(
   "/users/:id",
   authenticateToken,
   checkRole(["local_admin", "super_admin"]),
-  adminController.updateUserByAdmin
+  updateUserByAdmin
 );
-
-// Удаление пользователя (local_admin, super_admin)
 router.delete(
   "/users/:id",
   authenticateToken,
   checkRole(["local_admin", "super_admin"]),
-  adminController.deleteUserByAdmin
+  deleteUserByAdmin
 );
-
-// Назначение роли (local_admin, super_admin)
 router.post(
   "/users/assign-role",
   authenticateToken,
   checkRole(["local_admin", "super_admin"]),
-  adminController.assignRoleToUser
+  assignRoleToUser
 );
 
 export default router;

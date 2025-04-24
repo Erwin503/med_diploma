@@ -38,7 +38,7 @@ export const getAllUsers = async (
   next: NextFunction
 ) => {
   if (!["super_admin", "local_admin"].includes(req.user.role)) {
-    return res.status(403).json({ message: "Access denied" });
+    res.status(403).json({ message: "Access denied" });
   }
 
   const { error, value } = listUsersSchema.validate(req.query, {
@@ -47,7 +47,7 @@ export const getAllUsers = async (
   });
   if (error) {
     const details = error.details.map((d) => d.message);
-    return res.status(400).json({ message: "Invalid query", details });
+    res.status(400).json({ message: "Invalid query", details });
   }
 
   try {
@@ -74,7 +74,7 @@ export const getAllUsers = async (
     const total = Number(totalObj?.total || 0);
 
     logDebug("Fetched users list", { count: users.length, total });
-    return res.status(200).json({ users, meta: { total, page, limit } });
+    res.status(200).json({ users, meta: { total, page, limit } });
   } catch (err) {
     next(err);
   }
@@ -87,7 +87,7 @@ export const getUserById = async (
   next: NextFunction
 ) => {
   if (!["super_admin", "local_admin"].includes(req.user.role)) {
-    return res.status(403).json({ message: "Access denied" });
+    res.status(403).json({ message: "Access denied" });
   }
 
   try {
@@ -98,11 +98,11 @@ export const getUserById = async (
       .first();
 
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      res.status(404).json({ message: "User not found" });
     }
 
     logDebug("Fetched user by ID", { userId });
-    return res.status(200).json(user);
+    res.status(200).json(user);
   } catch (err) {
     next(err);
   }
@@ -115,7 +115,7 @@ export const updateUserByAdmin = async (
   next: NextFunction
 ) => {
   if (!["super_admin", "local_admin"].includes(req.user.role)) {
-    return res.status(403).json({ message: "Access denied" });
+    res.status(403).json({ message: "Access denied" });
   }
 
   const { error, value } = updateUserSchema.validate(req.body, {
@@ -124,14 +124,14 @@ export const updateUserByAdmin = async (
   });
   if (error) {
     const details = error.details.map((d) => d.message);
-    return res.status(400).json({ message: "Invalid payload", details });
+    res.status(400).json({ message: "Invalid payload", details });
   }
 
   try {
     const userId = parseInt(req.params.id, 10);
     const exists = await knex(USERS_TABLE).where({ id: userId }).first();
     if (!exists) {
-      return res.status(404).json({ message: "User not found" });
+      res.status(404).json({ message: "User not found" });
     }
 
     await knex(USERS_TABLE)
@@ -139,7 +139,7 @@ export const updateUserByAdmin = async (
       .update({ ...value, updated_at: new Date() });
 
     logDebug("Updated user by admin", { userId, ...value });
-    return res.status(200).json({ message: "User updated" });
+    res.status(200).json({ message: "User updated" });
   } catch (err) {
     next(err);
   }
@@ -152,20 +152,20 @@ export const deleteUserByAdmin = async (
   next: NextFunction
 ) => {
   if (!["super_admin", "local_admin"].includes(req.user.role)) {
-    return res.status(403).json({ message: "Access denied" });
+    res.status(403).json({ message: "Access denied" });
   }
 
   try {
     const userId = parseInt(req.params.id, 10);
     const exists = await knex(USERS_TABLE).where({ id: userId }).first();
     if (!exists) {
-      return res.status(404).json({ message: "User not found" });
+      res.status(404).json({ message: "User not found" });
     }
 
     await knex(USERS_TABLE).where({ id: userId }).del();
 
     logDebug("Deleted user by admin", { userId });
-    return res.status(200).json({ message: "User deleted" });
+    res.status(200).json({ message: "User deleted" });
   } catch (err) {
     next(err);
   }
@@ -178,7 +178,7 @@ export const assignRoleToUser = async (
   next: NextFunction
 ) => {
   if (!["super_admin", "local_admin"].includes(req.user.role)) {
-    return res.status(403).json({ message: "Access denied" });
+    res.status(403).json({ message: "Access denied" });
   }
 
   const { error, value } = assignRoleSchema.validate(req.body, {
@@ -187,14 +187,14 @@ export const assignRoleToUser = async (
   });
   if (error) {
     const details = error.details.map((d) => d.message);
-    return res.status(400).json({ message: "Invalid payload", details });
+    res.status(400).json({ message: "Invalid payload", details });
   }
 
   try {
     const { email, role } = value;
     const user = await knex(USERS_TABLE).where({ email }).first();
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      res.status(404).json({ message: "User not found" });
     }
 
     // Проверка прав назначения ролей
@@ -202,23 +202,17 @@ export const assignRoleToUser = async (
       role === "employee" &&
       !["super_admin", "local_admin"].includes(req.user.role)
     ) {
-      return res
-        .status(403)
-        .json({ message: "Not allowed to assign employee" });
+      res.status(403).json({ message: "Not allowed to assign employee" });
     }
     if (role === "local_admin" && req.user.role !== "super_admin") {
-      return res
-        .status(403)
-        .json({ message: "Not allowed to assign local_admin" });
+      res.status(403).json({ message: "Not allowed to assign local_admin" });
     }
     if (role === "super_admin" && req.user.role !== "super_admin") {
-      return res
-        .status(403)
-        .json({ message: "Not allowed to assign super_admin" });
+      res.status(403).json({ message: "Not allowed to assign super_admin" });
     }
 
     if (user.role === role) {
-      return res.status(200).json({ message: `Role already ${role}` });
+      res.status(200).json({ message: `Role already ${role}` });
     }
 
     await knex(USERS_TABLE)
@@ -226,7 +220,7 @@ export const assignRoleToUser = async (
       .update({ role, updated_at: new Date() });
 
     logDebug("Assigned role by admin", { email, role });
-    return res.status(200).json({ message: `Role ${role} assigned` });
+    res.status(200).json({ message: `Role ${role} assigned` });
   } catch (err) {
     next(err);
   }

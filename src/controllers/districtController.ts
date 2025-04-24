@@ -31,7 +31,7 @@ export const addDistrict = async (
   next: NextFunction
 ) => {
   if (req.user.role !== "super_admin") {
-    return res.status(403).json({ message: "Доступ запрещен" });
+    res.status(403).json({ message: "Доступ запрещен" });
   }
 
   // Валидация тела запроса
@@ -41,9 +41,7 @@ export const addDistrict = async (
   });
   if (error) {
     const messages = error.details.map((d) => d.message);
-    return res
-      .status(400)
-      .json({ message: "Invalid payload", details: messages });
+    res.status(400).json({ message: "Invalid payload", details: messages });
   }
 
   try {
@@ -53,9 +51,7 @@ export const addDistrict = async (
       .returning(["id", "name", "address", "phone", "email"]);
 
     logDebug(`Добавлен новый отдел с id: ${district.id}`, { district });
-    return res
-      .status(201)
-      .json({ message: "Отдел успешно добавлен", district });
+    res.status(201).json({ message: "Отдел успешно добавлен", district });
   } catch (err) {
     next(err);
   }
@@ -80,7 +76,7 @@ export const getAllDistricts = async (
       `Запрос всех отделов: [${districts.map((d) => d.id).join(", ")}]`,
       { count: districts.length }
     );
-    return res.status(200).json(districts);
+    res.status(200).json(districts);
   } catch (err) {
     next(err);
   }
@@ -106,11 +102,11 @@ export const getDistrictById = async (
       .first();
 
     if (!district) {
-      return res.status(404).json({ message: "Отдел не найден" });
+      res.status(404).json({ message: "Отдел не найден" });
     }
 
     logDebug(`Запрос отдела по id: ${district.id}`, { district });
-    return res.status(200).json(district);
+    res.status(200).json(district);
   } catch (err) {
     next(err);
   }
@@ -123,7 +119,7 @@ export const updateDistrict = async (
   next: NextFunction
 ) => {
   if (req.user.role !== "super_admin") {
-    return res.status(403).json({ message: "Доступ запрещен" });
+    res.status(403).json({ message: "Доступ запрещен" });
   }
 
   // Валидация тела запроса
@@ -133,9 +129,7 @@ export const updateDistrict = async (
   });
   if (error) {
     const messages = error.details.map((d) => d.message);
-    return res
-      .status(400)
-      .json({ message: "Invalid payload", details: messages });
+    res.status(400).json({ message: "Invalid payload", details: messages });
   }
 
   try {
@@ -147,7 +141,7 @@ export const updateDistrict = async (
       .update({ name, address, phone, email });
 
     if (!updatedCount) {
-      return res.status(404).json({ message: "Отдел не найден" });
+      res.status(404).json({ message: "Отдел не найден" });
     }
 
     const updatedDistrict = await knex<District>(TABLE_REF)
@@ -163,13 +157,13 @@ export const updateDistrict = async (
 
     // Явная обработка undefined после .first()
     if (!updatedDistrict) {
-      return res.status(404).json({ message: "Обновленный отдел не найден" });
+      res.status(404).json({ message: "Обновленный отдел не найден" });
     }
 
     logDebug(`Обновлен отдел по id: ${updatedDistrict.id}`, {
       updatedDistrict,
     });
-    return res
+    res
       .status(200)
       .json({ message: "Отдел успешно обновлен", updatedDistrict });
   } catch (err) {
@@ -184,7 +178,7 @@ export const deleteDistrict = async (
   next: NextFunction
 ) => {
   if (req.user.role !== "super_admin") {
-    return res.status(403).json({ message: "Доступ запрещен" });
+    res.status(403).json({ message: "Доступ запрещен" });
   }
 
   try {
@@ -194,11 +188,11 @@ export const deleteDistrict = async (
       .del();
 
     if (!deletedCount) {
-      return res.status(404).json({ message: "Отдел не найден" });
+      res.status(404).json({ message: "Отдел не найден" });
     }
 
     logDebug(`Удалён отдел по id: ${id}`);
-    return res.status(200).json({ message: "Отдел успешно удалён" });
+    res.status(200).json({ message: "Отдел успешно удалён" });
   } catch (err) {
     next(err);
   }

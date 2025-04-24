@@ -51,9 +51,7 @@ export const addWorkingHours = async (
   });
   if (error) {
     const messages = error.details.map((d) => d.message);
-    return res
-      .status(400)
-      .json({ message: "Invalid payload", details: messages });
+    res.status(400).json({ message: "Invalid payload", details: messages });
   }
 
   try {
@@ -86,7 +84,7 @@ export const addWorkingHours = async (
       { workingHour }
     );
 
-    return res
+    res
       .status(201)
       .json({ message: "Рабочее время успешно добавлено", workingHour });
   } catch (err) {
@@ -122,7 +120,7 @@ export const getWorkingHours = async (
       workingHours,
     });
 
-    return res.status(200).json(workingHours);
+    res.status(200).json(workingHours);
   } catch (err) {
     logger.error(
       `Ошибка при получении рабочего расписания для сотрудника ID: ${req.user.id}`,
@@ -156,7 +154,7 @@ export const getEmployeeScheduleByID = async (
       workingHours,
     });
 
-    return res.status(200).json(workingHours);
+    res.status(200).json(workingHours);
   } catch (err) {
     logger.error(
       `Ошибка при получении рабочего расписания по ID: ${req.params.id}`,
@@ -179,9 +177,7 @@ export const updateWorkingHours = async (
   });
   if (error) {
     const messages = error.details.map((d) => d.message);
-    return res
-      .status(400)
-      .json({ message: "Invalid payload", details: messages });
+    res.status(400).json({ message: "Invalid payload", details: messages });
   }
 
   try {
@@ -204,7 +200,7 @@ export const updateWorkingHours = async (
       logDebug(
         `Рабочее время ID: ${workingHourId} не найдено для сотрудника ID: ${employeeId}`
       );
-      return res.status(404).json({ message: "Рабочее время не найдено" });
+      res.status(404).json({ message: "Рабочее время не найдено" });
     }
 
     await knex<WorkingHours>(TABLE_REF)
@@ -225,9 +221,7 @@ export const updateWorkingHours = async (
 
     // Явная обработка undefined после .first()
     if (!updated) {
-      return res
-        .status(404)
-        .json({ message: "Обновленное рабочее время не найдено" });
+      res.status(404).json({ message: "Обновленное рабочее время не найдено" });
     }
 
     logDebug(
@@ -235,7 +229,7 @@ export const updateWorkingHours = async (
       { updated }
     );
 
-    return res
+    res
       .status(200)
       .json({ message: "Рабочее время успешно обновлено", updated });
   } catch (err) {
@@ -271,7 +265,7 @@ export const deleteWorkingHours = async (
       logDebug(
         `Рабочее время ID: ${workingHourId} не найдено для сотрудника ID: ${employeeId}`
       );
-      return res.status(404).json({ message: "Рабочее время не найдено" });
+      res.status(404).json({ message: "Рабочее время не найдено" });
     }
 
     await knex<WorkingHours>(TABLE_REF)
@@ -282,7 +276,7 @@ export const deleteWorkingHours = async (
       `Рабочее время ID: ${workingHourId} успешно удалено для сотрудника ID: ${employeeId}`
     );
 
-    return res.status(200).json({ message: "Рабочее время успешно удалено" });
+    res.status(200).json({ message: "Рабочее время успешно удалено" });
   } catch (err) {
     logger.error(
       `Ошибка при удалении рабочего времени ID: ${req.params.id} для сотрудника ID: ${req.user.id}`,

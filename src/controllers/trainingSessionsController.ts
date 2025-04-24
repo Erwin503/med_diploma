@@ -43,14 +43,12 @@ export const bookSession = async (
   });
   if (error) {
     const details = error.details.map((d) => d.message);
-    return res.status(400).json({ message: "Invalid payload", details });
+    res.status(400).json({ message: "Invalid payload", details });
   }
   let clientId: number;
   if (req.user.role === "super_admin" || req.user.role === "local_admin") {
     if (!value.user_id)
-      return res
-        .status(400)
-        .json({ message: "user_id is required for admins" });
+      res.status(400).json({ message: "user_id is required for admins" });
     clientId = value.user_id;
   } else {
     clientId = req.user.id;
@@ -61,10 +59,9 @@ export const bookSession = async (
     const slot = await knex(TABLE_WH)
       .where(`${WH_ALIAS}.id`, value.working_hour_id)
       .first();
-    if (!slot)
-      return res.status(404).json({ message: "Working hour not found" });
+    if (!slot) res.status(404).json({ message: "Working hour not found" });
     if (slot.status === "booked")
-      return res.status(400).json({ message: "Slot already booked" });
+      res.status(400).json({ message: "Slot already booked" });
 
     // Создаем сессию
     const [session] = await knex(SESS_TABLE)
@@ -81,7 +78,7 @@ export const bookSession = async (
       .update({ status: "booked" });
 
     logDebug("Session booked", { session });
-    return res.status(201).json({ message: "Booked successfully", session });
+    res.status(201).json({ message: "Booked successfully", session });
   } catch (err) {
     logger.error("Error booking session", { error: err });
     next(err);
@@ -100,7 +97,7 @@ export const completeSession = async (
   });
   if (error) {
     const details = error.details.map((d) => d.message);
-    return res.status(400).json({ message: "Invalid payload", details });
+    res.status(400).json({ message: "Invalid payload", details });
   }
   const sessionId = parseInt(req.params.id, 10);
   const trx = await knex.transaction();
@@ -112,11 +109,11 @@ export const completeSession = async (
       .first();
     if (!sess) {
       await trx.rollback();
-      return res.status(404).json({ message: "Session not found" });
+      res.status(404).json({ message: "Session not found" });
     }
     if (req.user.role === "employee" && sess.employee_id !== req.user.id) {
       await trx.rollback();
-      return res.status(403).json({ message: "Access denied" });
+      res.status(403).json({ message: "Access denied" });
     }
 
     // Обновляем сессию
@@ -134,7 +131,7 @@ export const completeSession = async (
     }
     await trx.commit();
     logDebug("Session completed", { sessionId });
-    return res.status(200).json({ message: "Session completed" });
+    res.status(200).json({ message: "Session completed" });
   } catch (err) {
     await trx.rollback();
     logger.error("Error completing session", { error: err });
@@ -158,7 +155,7 @@ export const cancelSession = async (
       .first();
     if (!sess) {
       await trx.rollback();
-      return res.status(404).json({ message: "Session not found" });
+      res.status(404).json({ message: "Session not found" });
     }
     // Проверка прав
     const oneDayMs = 24 * 60 * 60 * 1000;
@@ -173,11 +170,11 @@ export const cancelSession = async (
     if (!isAdmin) {
       if (!(isClient || isEmployeeOwner)) {
         await trx.rollback();
-        return res.status(403).json({ message: "Access denied" });
+        res.status(403).json({ message: "Access denied" });
       }
       if (slotDate.getTime() - now.getTime() < oneDayMs) {
         await trx.rollback();
-        return res
+        res
           .status(400)
           .json({ message: "Cannot cancel less than 1 day before" });
       }
@@ -195,7 +192,7 @@ export const cancelSession = async (
     await trx.commit();
 
     logDebug("Session canceled", { sessionId });
-    return res.status(200).json({ message: "Session canceled" });
+    res.status(200).json({ message: "Session canceled" });
   } catch (err) {
     await trx.rollback();
     logger.error("Error canceling session", { error: err });
@@ -229,7 +226,7 @@ export const getUserSessions = async (
       .orderBy(`${WH_ALIAS}.specific_date`, "asc");
 
     logDebug("Fetched user sessions", { userId, count: sessions.length });
-    return res.status(200).json(sessions);
+    res.status(200).json(sessions);
   } catch (err) {
     logger.error("Error fetching user sessions", { error: err });
     next(err);

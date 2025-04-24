@@ -1,10 +1,9 @@
 import express from "express";
 import userRoutes from "./authRouter";
-import gymRoutes from "./gymRouter";
-import trainerScheduleRoutes from "./trainerScheduleRoutes";
-import trainerDetailsRoutes from "./trainerDetailsRoutes";
+import districtRoutes from "./districtRouter";
 import trainerWorkingHoursRoutes from './trainerWorkingHoursRoutes';
 import trainingSessionsRoutes from './trainingSessionsRoutes';
+import employeeDetailsRoutes from "./employeeDetailsRoutes";
 
 const router = express.Router();
 
@@ -12,15 +11,12 @@ const router = express.Router();
 router.use("/users", userRoutes);
 
 // Подключение маршрутов для залов
-router.use("/gyms", gymRoutes);
-
-// Подключение маршрутов для расписания тренеров
-router.use("/trainer-schedule", trainerScheduleRoutes);
+router.use("/districts", districtRoutes);
 
 // Подключение маршрутов для информации о тренерах
-router.use("/trainer-details", trainerDetailsRoutes);
+router.use("/employee-details", employeeDetailsRoutes);
 
-router.use("/trainer-working-hours", trainerWorkingHoursRoutes); // CRUD для рабочих часов тренера
+router.use("/working-hours", workingHoursRoutes); // CRUD для рабочих часов тренера
 
 router.use("/training-sessions", trainingSessionsRoutes); // CRUD для сессий
 

@@ -43,7 +43,7 @@ export const signup = async (
   });
   if (error) {
     const details = error.details.map((d) => d.message);
-    return res.status(400).json({ message: "Invalid payload", details });
+    res.status(400).json({ message: "Invalid payload", details });
   }
   try {
     const { name, email, password, phone } = value;
@@ -63,7 +63,7 @@ export const signup = async (
       { expiresIn: process.env.JWT_EXPIRES_IN || "1h" }
     );
 
-    return res.status(201).json({ message: "Registered", token });
+    res.status(201).json({ message: "Registered", token });
   } catch (err) {
     next(err);
   }
@@ -81,7 +81,7 @@ export const login = async (
   });
   if (error) {
     const details = error.details.map((d) => d.message);
-    return res.status(400).json({ message: "Invalid payload", details });
+    res.status(400).json({ message: "Invalid payload", details });
   }
   try {
     const { email, password } = value;
@@ -99,7 +99,7 @@ export const login = async (
       { expiresIn: process.env.JWT_EXPIRES_IN || "1h" }
     );
 
-    return res.status(200).json({
+    res.status(200).json({
       message: "Authenticated",
       token,
       user: {
@@ -117,7 +117,7 @@ export const login = async (
 // Выход (JWT статeless, удалите токен на клиенте)
 export const logout = (req: AuthRequest, res: Response) => {
   // На сервере JWT не хранятся, поэтому просто отвечаем успехом
-  return res.status(200).json({ message: "Logged out successfully" });
+  res.status(200).json({ message: "Logged out successfully" });
 };
 
 // Профиль пользователя
@@ -133,7 +133,7 @@ export const getUserProfile = async (
     const user = await knex(USERS_TABLE).where({ id: userId }).first();
     if (!user) throw new AppError("User not found", 404);
 
-    return res.status(200).json({
+    res.status(200).json({
       id: user.id,
       name: user.name,
       email: user.email,
@@ -157,7 +157,7 @@ export const updateUserProfile = async (
   });
   if (error) {
     const details = error.details.map((d) => d.message);
-    return res.status(400).json({ message: "Invalid payload", details });
+    res.status(400).json({ message: "Invalid payload", details });
   }
   try {
     const userId = req.user.id;
@@ -167,7 +167,7 @@ export const updateUserProfile = async (
       .where({ id: userId })
       .update({ ...value, updated_at: new Date() });
 
-    return res.status(200).json({ message: "Profile updated" });
+    res.status(200).json({ message: "Profile updated" });
   } catch (err) {
     next(err);
   }
@@ -185,7 +185,7 @@ export const deleteUserProfile = async (
 
     await knex(USERS_TABLE).where({ id: userId }).del();
 
-    return res.status(200).json({ message: "User deleted" });
+    res.status(200).json({ message: "User deleted" });
   } catch (err) {
     next(err);
   }
