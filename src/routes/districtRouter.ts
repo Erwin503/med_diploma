@@ -20,6 +20,7 @@ router.get(
 router.post(
   "/",
   authenticateToken,
+  
   districtController.addDistrict
 );
 

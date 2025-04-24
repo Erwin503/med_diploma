@@ -14,6 +14,7 @@ export interface EmployeeDetails {
   user_id: number; // Ссылка на пользователя
   specialization?: string;
   experience_years?: number;
+  district_id: number; // Ссылка на отдел
   bio?: string;
   certifications?: string;
 }

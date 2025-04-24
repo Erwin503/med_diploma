@@ -2,87 +2,60 @@ import { Request, Response, NextFunction } from "express";
 import knex from "../db/knex";
 import { District } from "../interfaces/model";
 import logger from "../utils/logger";
-import Joi from "joi";
-import { AuthRequest } from "../middleware/authMiddleware";
 
-// Константы для таблицы и алиаса
-const DIST_TABLE = "Districts";
-const DIST_ALIAS = "d";
-const TABLE_REF = `${DIST_TABLE} as ${DIST_ALIAS}`;
-
-// Условное debug-логирование
 const isDev = process.env.NODE_ENV === "development";
 const logDebug = (msg: string, meta?: any) => {
   if (isDev) logger.debug(msg, meta);
 };
 
-// Схема валидации данных отдела
-const districtSchema = Joi.object({
-  name: Joi.string().required(),
-  address: Joi.string().required(),
-  phone: Joi.string().optional(),
-  email: Joi.string().email().optional(),
-});
-
-// Добавление нового отдела (только super_admin)
+// Добавление нового отдела
 export const addDistrict = async (
-  req: AuthRequest,
+  req: Request,
   res: Response,
   next: NextFunction
 ) => {
-  if (req.user.role !== "super_admin") {
-    res.status(403).json({ message: "Доступ запрещен" });
-  }
-
-  // Валидация тела запроса
-  const { error, value } = districtSchema.validate(req.body, {
-    abortEarly: false,
-    stripUnknown: true,
-  });
-  if (error) {
-    const messages = error.details.map((d) => d.message);
-    res.status(400).json({ message: "Invalid payload", details: messages });
-  }
-
   try {
-    const { name, address, phone, email } = value;
-    const [district] = await knex<District>(TABLE_REF)
-      .insert({ name, address, phone, email })
-      .returning(["id", "name", "address", "phone", "email"]);
+    const { name, address, phone, email } = req.body;
+    logDebug("Adding district", { name, address, phone, email });
 
-    logDebug(`Добавлен новый отдел с id: ${district.id}`, { district });
-    res.status(201).json({ message: "Отдел успешно добавлен", district });
-  } catch (err) {
-    next(err);
+    // В MySQL insert возвращает массив вставленных ID
+    const [insertId] = await knex<District>("Districts")
+      .insert({ name, address, phone, email });
+
+    // Читаем созданный отдел
+    const district = await knex<District>("Districts")
+      .select("id", "name", "address", "phone", "email")
+      .where({ id: insertId })
+      .first();
+
+    res.status(201).json({
+      message: "Отдел успешно добавлен",
+      district,
+    });
+  } catch (error) {
+    logger.error("Ошибка при добавлении отдела", { error });
+    next(error);
   }
 };
 
-// Получение всех отделов (доступно всем)
+// Получение всех отделов
 export const getAllDistricts = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
   try {
-    const districts = await knex<District>(TABLE_REF).select(
-      `${DIST_ALIAS}.id`,
-      `${DIST_ALIAS}.name`,
-      `${DIST_ALIAS}.address`,
-      `${DIST_ALIAS}.phone`,
-      `${DIST_ALIAS}.email`
-    );
-
-    logDebug(
-      `Запрос всех отделов: [${districts.map((d) => d.id).join(", ")}]`,
-      { count: districts.length }
-    );
+    const districts = await knex<District>("Districts")
+      .select("id", "name", "address", "phone", "email");
+    logDebug("Fetched all districts", { count: districts.length });
     res.status(200).json(districts);
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    logger.error("Ошибка при получении всех отделов", { error });
+    next(error);
   }
 };
 
-// Получение одного отдела по ID (доступно всем)
+// Получение одного отдела по ID
 export const getDistrictById = async (
   req: Request,
   res: Response,
@@ -90,110 +63,81 @@ export const getDistrictById = async (
 ) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const district = await knex<District>(TABLE_REF)
-      .select(
-        `${DIST_ALIAS}.id`,
-        `${DIST_ALIAS}.name`,
-        `${DIST_ALIAS}.address`,
-        `${DIST_ALIAS}.phone`,
-        `${DIST_ALIAS}.email`
-      )
-      .where(`${DIST_ALIAS}.id`, id)
+    const district = await knex<District>("Districts")
+      .select("id", "name", "address", "phone", "email")
+      .where({ id })
       .first();
 
     if (!district) {
       res.status(404).json({ message: "Отдел не найден" });
+      return;
     }
 
-    logDebug(`Запрос отдела по id: ${district.id}`, { district });
+    logDebug("Fetched district by ID", { id });
     res.status(200).json(district);
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    logger.error("Ошибка при получении отдела по ID", { error });
+    next(error);
   }
 };
 
-// Обновление информации об отделе (только super_admin)
+// Обновление информации об отделе
 export const updateDistrict = async (
-  req: AuthRequest,
+  req: Request,
   res: Response,
   next: NextFunction
 ) => {
-  if (req.user.role !== "super_admin") {
-    res.status(403).json({ message: "Доступ запрещен" });
-  }
-
-  // Валидация тела запроса
-  const { error, value } = districtSchema.validate(req.body, {
-    abortEarly: false,
-    stripUnknown: true,
-  });
-  if (error) {
-    const messages = error.details.map((d) => d.message);
-    res.status(400).json({ message: "Invalid payload", details: messages });
-  }
-
   try {
     const id = parseInt(req.params.id, 10);
-    const { name, address, phone, email } = value;
+    const { name, address, phone, email } = req.body;
+    logDebug("Updating district", { id, name, address, phone, email });
 
-    const updatedCount = await knex<District>(TABLE_REF)
-      .where(`${DIST_ALIAS}.id`, id)
+    const updatedCount = await knex<District>("Districts")
+      .where({ id })
       .update({ name, address, phone, email });
 
     if (!updatedCount) {
       res.status(404).json({ message: "Отдел не найден" });
+      return;
     }
 
-    const updatedDistrict = await knex<District>(TABLE_REF)
-      .select(
-        `${DIST_ALIAS}.id`,
-        `${DIST_ALIAS}.name`,
-        `${DIST_ALIAS}.address`,
-        `${DIST_ALIAS}.phone`,
-        `${DIST_ALIAS}.email`
-      )
-      .where(`${DIST_ALIAS}.id`, id)
+    const updatedDistrict = await knex<District>("Districts")
+      .select("id", "name", "address", "phone", "email")
+      .where({ id })
       .first();
 
-    // Явная обработка undefined после .first()
-    if (!updatedDistrict) {
-      res.status(404).json({ message: "Обновленный отдел не найден" });
-    }
-
-    logDebug(`Обновлен отдел по id: ${updatedDistrict.id}`, {
+    res.status(200).json({
+      message: "Отдел успешно обновлен",
       updatedDistrict,
     });
-    res
-      .status(200)
-      .json({ message: "Отдел успешно обновлен", updatedDistrict });
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    logger.error("Ошибка при обновлении отдела", { error });
+    next(error);
   }
 };
 
-// Удаление отдела (только super_admin)
+// Удаление отдела
 export const deleteDistrict = async (
-  req: AuthRequest,
+  req: Request,
   res: Response,
   next: NextFunction
 ) => {
-  if (req.user.role !== "super_admin") {
-    res.status(403).json({ message: "Доступ запрещен" });
-  }
-
   try {
     const id = parseInt(req.params.id, 10);
-    const deletedCount = await knex<District>(TABLE_REF)
-      .where(`${DIST_ALIAS}.id`, id)
+    logDebug("Deleting district", { id });
+
+    const deletedCount = await knex<District>("Districts")
+      .where({ id })
       .del();
 
     if (!deletedCount) {
       res.status(404).json({ message: "Отдел не найден" });
+      return;
     }
 
-    logDebug(`Удалён отдел по id: ${id}`);
-    res.status(200).json({ message: "Отдел успешно удалён" });
-  } catch (err) {
-    next(err);
+    res.status(200).json({ message: "Отдел успешно удален" });
+  } catch (error) {
+    logger.error("Ошибка при удалении отдела", { error });
+    next(error);
   }
 };
