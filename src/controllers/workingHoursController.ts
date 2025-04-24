@@ -17,26 +17,30 @@ const logDebug = (message: string, meta?: any) => {
 };
 
 // Схема валидации рабочего времени
+// Схема валидации рабочего времени
 const workingHoursSchema = Joi.object({
-  day_of_week: Joi.number().integer().min(0).max(6).when("specific_date", {
-    is: Joi.exist(),
-    then: Joi.optional(),
-    otherwise: Joi.required(),
-  }),
-  specific_date: Joi.date().iso().allow(null).when("day_of_week", {
-    is: Joi.exist(),
-    then: Joi.optional(),
-    otherwise: Joi.required(),
-  }),
+  employee_id: Joi.number().integer(),
+  day_of_week: Joi.number()
+    .integer()
+    .min(0)
+    .max(6)
+    .optional(),
+  specific_date: Joi.date()
+    .iso()
+    .allow(null)
+    .optional(),
   start_time: Joi.string()
     .pattern(/^([01]\d|2[0-3]):([0-5]\d)$/)
     .required()
-    .message("start_time must be in HH:mm format"),
+    .messages({ "string.pattern.base": "start_time must be in HH:mm format" }),
   end_time: Joi.string()
     .pattern(/^([01]\d|2[0-3]):([0-5]\d)$/)
     .required()
-    .message("end_time must be in HH:mm format"),
-});
+    .messages({ "string.pattern.base": "end_time must be in HH:mm format" }),
+})
+  // Требуем хотя бы одно из полей: день недели или конкретная дата
+  .or("day_of_week", "specific_date");
+
 
 // Добавление рабочего времени сотрудника
 export const addWorkingHours = async (
