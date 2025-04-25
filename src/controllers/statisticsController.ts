@@ -9,8 +9,12 @@ export const getAttendanceByDirection = async (
   res: Response,
   next: NextFunction
 ) => {
+  // Проверяем права
   if (!["super_admin", "local_admin"].includes(req.user.role)) {
-    return res.status(403).json({ message: "Access denied" });
+    res.status(403).json({ message: "Access denied" });
+    // Прерываем дальнейшее выполнение, передав управление в Express
+    next();
+    return;
   }
 
   try {
@@ -23,18 +27,17 @@ export const getAttendanceByDirection = async (
 
     logger.debug(`directions - ${JSON.stringify(allDirections)}`);
 
-    // 2) Считаем посещения по направлениям за последние 7 дней
-    const rows: Array<{ name: string; count: string }> = await knex(
-      "Sessions as s"
-    )
+    // 2) Подсчёт completed за последнюю неделю
+    const rows = await knex("Sessions as s")
       .join("Directions as d", "s.direction_id", "d.id")
       .where("s.status", "completed")
       .andWhere("s.updated_at", ">=", sevenDaysAgo)
       .groupBy("d.id", "d.name")
       .select("d.name")
       .count("s.id as count");
+    logger.debug(`rows - ${JSON.stringify(rows)}`);
 
-    // 3) Собираем словарь итогов, предварительно заполняя 0
+    // 3) Формируем результат, инициализируя 0
     const result: Record<string, number> = {};
     allDirections.forEach(({ name }) => {
       result[name] = 0;
@@ -42,13 +45,16 @@ export const getAttendanceByDirection = async (
     logger.debug(`JSON.stringify(rows) - ${JSON.stringify(rows)}`);
 
     // 4) Подставляем реальные значения
-    rows.forEach((row) => {
-      result[row.name] = parseInt(row.count, 10);
+    rows.forEach(({ name, count }) => {
+      // count может быть строкой (MySQL возвращает string) или числом
+      const num = typeof count === "string" ? parseInt(count, 10) : count;
+      result[name] = num;
     });
 
-    return res.status(200).json(result);
+    res.status(200).json(result);
+    next(); // передаём управление дальше (если есть)
   } catch (err) {
     logger.error("Error fetching attendance stats", { error: err });
-    return next(err);
+    next(err);
   }
 };
