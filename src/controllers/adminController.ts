@@ -312,3 +312,63 @@ export const assignRoleToUser = async (
     // Если rollback — ответ уже отправлен
   }
 };
+
+/**
+ * Получить всех сотрудников по ID отдела
+ * Доступно всем, без авторизации
+ */
+export const getEmployeesByDistrict = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  // 1) Парсим и валидируем параметр
+  const districtId = parseInt(req.params.id, 10);
+  if (Number.isNaN(districtId)) {
+    res.status(400).json({ message: "Invalid district id" });
+    return;
+  }
+
+  try {
+    // 2) Делаем запрос: из EmployeeDetails + Users
+    const employees = await knex<EmployeeDetails>(EMP_DETAILS_TABLE + " as e")
+      .join(USERS_TABLE + " as u", "e.user_id", "u.id")
+      .where("e.district_id", districtId)
+      .andWhere("u.role", "employee")
+      .select(
+        "u.id as user_id",
+        "u.name",
+        "u.email",
+        "e.specialization",
+        "e.experience_years",
+        "e.bio",
+        "e.certifications"
+      );
+
+    // 3) Форматируем, если у кого-то нет деталей
+    const formatted = employees.map((emp) => {
+      const hasDetails =
+        emp.specialization ||
+        emp.experience_years ||
+        emp.bio ||
+        emp.certifications;
+      if (!hasDetails) {
+        return {
+          user_id: emp.user_id,
+          name: emp.name,
+          email: emp.email,
+          message: "У этого сотрудника нет дополнительной информации",
+        };
+      }
+      return emp;
+    });
+
+    // 4) Отдаём клиенту
+    res.status(200).json(formatted);
+  } catch (err) {
+    logger.error(`Error fetching employees for district ID ${req.params.id}`, {
+      error: err,
+    });
+    next(err);
+  }
+};

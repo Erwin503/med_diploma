@@ -7,6 +7,7 @@ import {
   updateUserByAdmin,
   deleteUserByAdmin,
   assignRoleToUser,
+  getEmployeesByDistrict,
 } from "../controllers/adminController";
 
 const router = express.Router();
@@ -22,5 +23,6 @@ router.delete("/:id", deleteUserByAdmin);
 
 // Назначение ролей
 router.post("/assign-role", assignRoleToUser);
+router.get("/district/:id/employees", getEmployeesByDistrict);
 
 export default router;
