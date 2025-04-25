@@ -2,32 +2,19 @@ import { Request, Response, NextFunction } from "express";
 import knex from "../db/knex";
 import { AuthRequest } from "../middleware/authMiddleware";
 import logger from "../utils/logger";
-import Joi from "joi";
+import Joi, { ValidationErrorItem } from "joi";
 
-// Таблицы и алиасы
-const WH_TABLE = "WorkingHours";
-const WH_ALIAS = "wh";
-const SESS_TABLE = "Sessions";
-const SESS_ALIAS = "s";
-const DIST_TABLE = "Districts";
-const TABLE_WH = `${WH_TABLE} as ${WH_ALIAS}`;
-const TABLE_SESS = `${SESS_TABLE} as ${SESS_ALIAS}`;
-
-// Условное debug-логирование
+// Включаем подробное логирование в dev
 const isDev = process.env.NODE_ENV === "development";
 const logDebug = (msg: string, meta?: any) => {
   if (isDev) logger.debug(msg, meta);
 };
 
-// Схемы валидации
+// Схема валидации для бронирования сессии
 const bookSchema = Joi.object({
   working_hour_id: Joi.number().integer().required(),
-  district_id: Joi.number().integer().default(1),
-  user_id: Joi.number().integer(), // admin only
-});
-const completeSchema = Joi.object({
-  training_type: Joi.string().optional(),
-  comments: Joi.string().optional(),
+  district_id: Joi.number().integer().min(1).default(1),
+  direction_id: Joi.number().integer().required(),
 });
 
 // Бронирование сессии
@@ -36,50 +23,65 @@ export const bookSession = async (
   res: Response,
   next: NextFunction
 ) => {
-  // Валидация запроса
+  // Валидация входных данных
   const { error, value } = bookSchema.validate(req.body, {
     abortEarly: false,
     stripUnknown: true,
   });
   if (error) {
-    const details = error.details.map((d) => d.message);
+    const details = error.details.map((d: ValidationErrorItem) => d.message);
     res.status(400).json({ message: "Invalid payload", details });
+    return;
   }
-  let clientId: number;
-  if (req.user.role === "super_admin" || req.user.role === "local_admin") {
-    if (!value.user_id)
-      res.status(400).json({ message: "user_id is required for admins" });
-    clientId = value.user_id;
-  } else {
-    clientId = req.user.id;
-  }
+  const { working_hour_id, district_id, direction_id } = value;
 
+  const trx = await knex.transaction();
   try {
-    // Проверяем слот
-    const slot = await knex(TABLE_WH)
-      .where(`${WH_ALIAS}.id`, value.working_hour_id)
+    // Проверяем направление
+    const direction = await trx("Directions").where({ id: direction_id }).first();
+    if (!direction) {
+      res.status(404).json({ message: "Direction not found" });
+      await trx.rollback();
+      return;
+    }
+
+    // Проверяем рабочий час
+    const workingHour = await trx("WorkingHours")
+      .where({ id: working_hour_id })
       .first();
-    if (!slot) res.status(404).json({ message: "Working hour not found" });
-    if (slot.status === "booked")
-      res.status(400).json({ message: "Slot already booked" });
+    if (!workingHour) {
+      res.status(404).json({ message: "Working hour not found" });
+      await trx.rollback();
+      return;
+    }
+    if (workingHour.status === "booked") {
+      res.status(400).json({ message: "This working hour is already booked" });
+      await trx.rollback();
+      return;
+    }
 
-    // Создаем сессию
-    const [session] = await knex(SESS_TABLE)
-      .insert({
-        user_id: clientId,
-        working_hour_id: value.working_hour_id,
-        district_id: value.district_id,
-        status: "booked",
-      })
-      .returning("*");
-    // Обновляем слот
-    await knex(WH_TABLE)
-      .where({ id: value.working_hour_id })
-      .update({ status: "booked" });
+    // Создаём сессию
+    const [sessionId] = await trx("Sessions").insert({
+      user_id: req.user.id,
+      district_id,
+      direction_id,
+      working_hour_id,
+      status: "booked",
+      created_at: trx.fn.now(),
+      updated_at: trx.fn.now(),
+    });
 
-    logDebug("Session booked", { session });
-    res.status(201).json({ message: "Booked successfully", session });
+    // Обновляем статус рабочего часа
+    await trx("WorkingHours")
+      .where({ id: working_hour_id })
+      .update({ status: "booked", updated_at: trx.fn.now() });
+
+    await trx.commit();
+
+    logDebug("Session booked", { sessionId, working_hour_id, direction_id });
+    res.status(201).json({ message: "Session booked", sessionId });
   } catch (err) {
+    await trx.rollback();
     logger.error("Error booking session", { error: err });
     next(err);
   }
@@ -91,47 +93,43 @@ export const completeSession = async (
   res: Response,
   next: NextFunction
 ) => {
-  const { error, value } = completeSchema.validate(req.body, {
-    abortEarly: false,
-    stripUnknown: true,
-  });
-  if (error) {
-    const details = error.details.map((d) => d.message);
-    res.status(400).json({ message: "Invalid payload", details });
-  }
-  const sessionId = parseInt(req.params.id, 10);
   const trx = await knex.transaction();
   try {
-    // Проверяем права: админ или сотрудник для своего слота
-    const sess = await trx(TABLE_SESS)
-      .leftJoin(TABLE_WH, `${SESS_ALIAS}.working_hour_id`, `${WH_ALIAS}.id`)
-      .where(`${SESS_ALIAS}.id`, sessionId)
-      .first();
-    if (!sess) {
-      await trx.rollback();
+    const sessionId = parseInt(req.params.id, 10);
+    const { comments } = req.body;
+
+    // Обновляем статус сессии
+    const updatedCount = await trx("Sessions")
+      .where({ id: sessionId })
+      .update({
+        status: "completed",
+        comments: comments || null,
+        updated_at: trx.fn.now(),
+      });
+    if (!updatedCount) {
       res.status(404).json({ message: "Session not found" });
-    }
-    if (req.user.role === "employee" && sess.employee_id !== req.user.id) {
       await trx.rollback();
-      res.status(403).json({ message: "Access denied" });
+      return;
     }
 
-    // Обновляем сессию
-    await trx(SESS_TABLE).where({ id: sessionId }).update({
-      status: "completed",
-      training_type: value.training_type,
-      comments: value.comments,
-      updated_at: new Date(),
-    });
-    // Освобождаем слот
-    if (sess.status === "booked") {
-      await trx(WH_TABLE)
-        .where({ id: sess.working_hour_id })
-        .update({ status: "available", updated_at: new Date() });
+    // Получаем рабочий час
+    const session = await trx("Sessions")
+      .select("working_hour_id")
+      .where({ id: sessionId })
+      .first();
+    if (!session) {
+      res.status(404).json({ message: "Session not found" });
+      await trx.rollback();
+      return;
     }
+
+    // Освобождаем рабочий час
+    await trx("WorkingHours")
+      .where({ id: session.working_hour_id, status: "booked" })
+      .update({ status: "available", updated_at: trx.fn.now() });
+
     await trx.commit();
-    logDebug("Session completed", { sessionId });
-    res.status(200).json({ message: "Session completed" });
+    res.status(200).json({ message: "Session completed and working hour released" });
   } catch (err) {
     await trx.rollback();
     logger.error("Error completing session", { error: err });
@@ -145,54 +143,41 @@ export const cancelSession = async (
   res: Response,
   next: NextFunction
 ) => {
-  const sessionId = parseInt(req.params.id, 10);
   const trx = await knex.transaction();
   try {
-    // Получаем сессию и слот
-    const sess = await trx(TABLE_SESS)
-      .leftJoin(TABLE_WH, `${SESS_ALIAS}.working_hour_id`, `${WH_ALIAS}.id`)
-      .where(`${SESS_ALIAS}.id`, sessionId)
-      .first();
-    if (!sess) {
-      await trx.rollback();
-      res.status(404).json({ message: "Session not found" });
-    }
-    // Проверка прав
-    const oneDayMs = 24 * 60 * 60 * 1000;
-    const slotDate = new Date(`${sess.specific_date}T${sess.start_time}`);
-    const now = new Date();
-    const isAdmin =
-      req.user.role === "super_admin" || req.user.role === "local_admin";
-    const isClient =
-      req.user.role !== "employee" && sess.user_id === req.user.id;
-    const isEmployeeOwner =
-      req.user.role === "employee" && sess.employee_id === req.user.id;
-    if (!isAdmin) {
-      if (!(isClient || isEmployeeOwner)) {
-        await trx.rollback();
-        res.status(403).json({ message: "Access denied" });
-      }
-      if (slotDate.getTime() - now.getTime() < oneDayMs) {
-        await trx.rollback();
-        res
-          .status(400)
-          .json({ message: "Cannot cancel less than 1 day before" });
-      }
-    }
+    const sessionId = parseInt(req.params.id, 10);
 
-    // Отмена
-    await trx(SESS_TABLE)
+    // Обновляем статус
+    const updatedCount = await trx("Sessions")
       .where({ id: sessionId })
-      .update({ status: "canceled", updated_at: now });
-    if (sess.status === "booked") {
-      await trx(WH_TABLE)
-        .where({ id: sess.working_hour_id })
-        .update({ status: "available", updated_at: now });
+      .update({
+        status: "canceled",
+        updated_at: trx.fn.now(),
+      });
+    if (!updatedCount) {
+      res.status(404).json({ message: "Session not found" });
+      await trx.rollback();
+      return;
     }
-    await trx.commit();
 
-    logDebug("Session canceled", { sessionId });
-    res.status(200).json({ message: "Session canceled" });
+    // Получаем рабочий час
+    const session = await trx("Sessions")
+      .select("working_hour_id")
+      .where({ id: sessionId })
+      .first();
+    if (!session) {
+      res.status(404).json({ message: "Session not found" });
+      await trx.rollback();
+      return;
+    }
+
+    // Освобождаем рабочий час
+    await trx("WorkingHours")
+      .where({ id: session.working_hour_id, status: "booked" })
+      .update({ status: "available", updated_at: trx.fn.now() });
+
+    await trx.commit();
+    res.status(200).json({ message: "Session canceled and working hour released" });
   } catch (err) {
     await trx.rollback();
     logger.error("Error canceling session", { error: err });
@@ -200,7 +185,7 @@ export const cancelSession = async (
   }
 };
 
-// Получение своих сессий (клиент или админ, но только свои записки)
+// Получение сессий текущего пользователя
 export const getUserSessions = async (
   req: AuthRequest,
   res: Response,
@@ -208,24 +193,22 @@ export const getUserSessions = async (
 ) => {
   try {
     const userId = req.user.id;
-    const sessions = await knex(TABLE_SESS)
-      .leftJoin(TABLE_WH, `${SESS_ALIAS}.working_hour_id`, `${WH_ALIAS}.id`)
-      .leftJoin("Users as employees", `${WH_ALIAS}.employee_id`, "employees.id")
-      .leftJoin("Districts as d", `${SESS_ALIAS}.district_id`, "d.id")
+    const sessions = await knex("Sessions as s")
+      .leftJoin("WorkingHours as wh", "s.working_hour_id", "wh.id")
+      .leftJoin("Directions as d", "s.direction_id", "d.id")
       .select(
-        `${SESS_ALIAS}.id as session_id`,
-        `${SESS_ALIAS}.status`,
-        `${WH_ALIAS}.specific_date`,
-        `${WH_ALIAS}.day_of_week`,
-        `${WH_ALIAS}.start_time`,
-        `${WH_ALIAS}.end_time`,
-        `employees.name as employee_name`,
-        `d.name as district_name`
+        "s.id",
+        "s.status",
+        "wh.specific_date",
+        "wh.day_of_week",
+        "wh.start_time",
+        "wh.end_time",
+        "d.name as direction_name"
       )
-      .where(`${SESS_ALIAS}.user_id`, userId)
-      .orderBy(`${WH_ALIAS}.specific_date`, "asc");
+      .where("s.user_id", userId)
+      .orderBy("wh.specific_date", "asc")
+      .orderBy("wh.start_time", "asc");
 
-    logDebug("Fetched user sessions", { userId, count: sessions.length });
     res.status(200).json(sessions);
   } catch (err) {
     logger.error("Error fetching user sessions", { error: err });

@@ -48,12 +48,11 @@ export interface District {
 // Интерфейс для таблицы Sessions
 export interface Session {
   id: number;
-  user_id: number; // Ссылка на пользователя
-  emploee_id: number; // Ссылка на сотрудника
-  district_id: number; // Ссылка на отдел
+  user_id: number; // клиент
+  employee_id: number; // сотрудник
+  direction_id: number; // новое поле
   date: Date;
-  // training_type?: string;
-  comments?: string; // Необязательное поле
+  comments?: string;
   status: "booked" | "completed" | "canceled";
 }
 

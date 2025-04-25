@@ -3,44 +3,37 @@ import knex from "../db/knex";
 import { WorkingHours } from "../interfaces/model";
 import logger from "../utils/logger";
 import { AuthRequest } from "../middleware/authMiddleware";
-import Joi from "joi";
+import Joi, { ValidationErrorItem } from "joi";
 
-// Настройка констант для таблицы и алиаса
+// Константы
 const WH_TABLE = "WorkingHours";
-const WH_ALIAS = "w";
-const TABLE_REF = `${WH_TABLE} as ${WH_ALIAS}`;
 
-// Определяем, в каком окружении работаем
+// Условное debug-логирование
 const isDev = process.env.NODE_ENV === "development";
-const logDebug = (message: string, meta?: any) => {
-  if (isDev) logger.debug(message, meta);
+const logDebug = (msg: string, meta?: any) => {
+  if (isDev) logger.debug(msg, meta);
 };
 
 // Схема валидации рабочего времени
-// Схема валидации рабочего времени
 const workingHoursSchema = Joi.object({
-  employee_id: Joi.number().integer(),
-  day_of_week: Joi.number()
-    .integer()
-    .min(0)
-    .max(6)
-    .optional(),
-  specific_date: Joi.date()
-    .iso()
-    .allow(null)
-    .optional(),
+  employee_id: Joi.number().integer().optional(),
+  day_of_week: Joi.string().optional(), // теперь просто строка
+  specific_date: Joi.string().optional(), // тоже строка
   start_time: Joi.string()
     .pattern(/^([01]\d|2[0-3]):([0-5]\d)$/)
     .required()
-    .messages({ "string.pattern.base": "start_time must be in HH:mm format" }),
+    .messages({
+      "string.pattern.base": "start_time must be in HH:mm format",
+      "any.required": "start_time is required",
+    }),
   end_time: Joi.string()
     .pattern(/^([01]\d|2[0-3]):([0-5]\d)$/)
     .required()
-    .messages({ "string.pattern.base": "end_time must be in HH:mm format" }),
-})
-  // Требуем хотя бы одно из полей: день недели или конкретная дата
-  .or("day_of_week", "specific_date");
-
+    .messages({
+      "string.pattern.base": "end_time must be in HH:mm format",
+      "any.required": "end_time is required",
+    }),
+});
 
 // Добавление рабочего времени сотрудника
 export const addWorkingHours = async (
@@ -48,59 +41,68 @@ export const addWorkingHours = async (
   res: Response,
   next: NextFunction
 ) => {
-  // Валидация тела запроса
+  // Валидация
   const { error, value } = workingHoursSchema.validate(req.body, {
     abortEarly: false,
     stripUnknown: true,
   });
   if (error) {
-    const messages = error.details.map((d) => d.message);
-    res.status(400).json({ message: "Invalid payload", details: messages });
+    const details = error.details.map((d: ValidationErrorItem) => d.message);
+    res.status(400).json({ message: "Invalid payload", details });
+    return;
+  }
+
+  // Определяем targetEmployeeId
+  let targetEmployeeId: number;
+  if (["super_admin", "local_admin"].includes(req.user.role)) {
+    if (!value.employee_id) {
+      res.status(400).json({ message: "employee_id is required for admins" });
+      return;
+    }
+    targetEmployeeId = value.employee_id;
+  } else if (req.user.role === "employee") {
+    targetEmployeeId = req.user.id;
+  } else {
+    res.status(403).json({ message: "Access denied" });
+    return;
   }
 
   try {
-    const employeeId = req.user.id;
-    const { day_of_week, specific_date, start_time, end_time } = value;
-
-    logDebug(`Добавление рабочего времени для сотрудника ID: ${employeeId}`, {
-      data: value,
-    });
-
-    const [workingHour] = await knex<WorkingHours>(TABLE_REF)
-      .insert({
-        employee_id: employeeId,
-        day_of_week,
-        specific_date,
-        start_time,
-        end_time,
-      })
-      .returning([
-        `${WH_ALIAS}.id`,
-        `${WH_ALIAS}.employee_id`,
-        `${WH_ALIAS}.day_of_week`,
-        `${WH_ALIAS}.specific_date`,
-        `${WH_ALIAS}.start_time`,
-        `${WH_ALIAS}.end_time`,
-      ]);
-
     logDebug(
-      `Рабочее время успешно добавлено для сотрудника ID: ${employeeId}`,
-      { workingHour }
+      `Добавление рабочего времени для сотрудника ID: ${targetEmployeeId}`,
+      { value }
     );
 
+    // Вставка записи
+    const [insertId] = await knex<WorkingHours>(WH_TABLE).insert({
+      employee_id: targetEmployeeId,
+      day_of_week: value.day_of_week,
+      specific_date: value.specific_date,
+      start_time: value.start_time,
+      end_time: value.end_time,
+    });
+
+    // Чтение вставленной записи
+    const workingHour = await knex<WorkingHours>(WH_TABLE)
+      .where({ id: insertId })
+      .first();
+
+    logDebug(`Рабочее время добавлено (ID: ${workingHour?.id})`, {
+      workingHour,
+    });
     res
       .status(201)
       .json({ message: "Рабочее время успешно добавлено", workingHour });
   } catch (err) {
     logger.error(
-      `Ошибка при добавлении рабочего времени для сотрудника ID: ${req.user.id}`,
+      `Ошибка при добавлении рабочего времени ID: ${targetEmployeeId}`,
       { error: err }
     );
     next(err);
   }
 };
 
-// Получение рабочего расписания сотрудника (собственный профиль)
+// Получение рабочего расписания сотрудника (личный)
 export const getWorkingHours = async (
   req: AuthRequest,
   res: Response,
@@ -108,22 +110,20 @@ export const getWorkingHours = async (
 ) => {
   try {
     const employeeId = req.user.id;
-
-    const workingHours = await knex<WorkingHours>(TABLE_REF)
+    const workingHours = await knex<WorkingHours>(WH_TABLE)
       .select(
-        `${WH_ALIAS}.id`,
-        `${WH_ALIAS}.employee_id`,
-        `${WH_ALIAS}.day_of_week`,
-        `${WH_ALIAS}.specific_date`,
-        `${WH_ALIAS}.start_time`,
-        `${WH_ALIAS}.end_time`
+        "id",
+        "employee_id",
+        "day_of_week",
+        "specific_date",
+        "start_time",
+        "end_time"
       )
-      .where(`${WH_ALIAS}.employee_id`, employeeId);
+      .where({ employee_id: employeeId });
 
-    logDebug(`Рабочее расписание получено для сотрудника ID: ${employeeId}`, {
+    logDebug(`Получено расписание для сотрудника ID: ${employeeId}`, {
       workingHours,
     });
-
     res.status(200).json(workingHours);
   } catch (err) {
     logger.error(
@@ -134,7 +134,7 @@ export const getWorkingHours = async (
   }
 };
 
-// Получение рабочего расписания сотрудника по ID (публичный доступ)
+// Получение рабочего расписания по ID (публичный)
 export const getEmployeeScheduleByID = async (
   req: Request,
   res: Response,
@@ -142,26 +142,24 @@ export const getEmployeeScheduleByID = async (
 ) => {
   try {
     const employeeId = parseInt(req.params.id, 10);
-
-    const workingHours = await knex<WorkingHours>(TABLE_REF)
+    const workingHours = await knex<WorkingHours>(WH_TABLE)
       .select(
-        `${WH_ALIAS}.id`,
-        `${WH_ALIAS}.employee_id`,
-        `${WH_ALIAS}.day_of_week`,
-        `${WH_ALIAS}.specific_date`,
-        `${WH_ALIAS}.start_time`,
-        `${WH_ALIAS}.end_time`
+        "id",
+        "employee_id",
+        "day_of_week",
+        "specific_date",
+        "start_time",
+        "end_time"
       )
-      .where(`${WH_ALIAS}.employee_id`, employeeId);
+      .where({ employee_id: employeeId });
 
-    logDebug(`Рабочее расписание получено для сотрудника ID: ${employeeId}`, {
+    logDebug(`Public fetch schedule for employee ID: ${employeeId}`, {
       workingHours,
     });
-
     res.status(200).json(workingHours);
   } catch (err) {
     logger.error(
-      `Ошибка при получении рабочего расписания по ID: ${req.params.id}`,
+      `Ошибка при публичном получении расписания для сотрудника ID: ${req.params.id}`,
       { error: err }
     );
     next(err);
@@ -174,72 +172,56 @@ export const updateWorkingHours = async (
   res: Response,
   next: NextFunction
 ) => {
-  // Валидация тела запроса
+  // Валидация
   const { error, value } = workingHoursSchema.validate(req.body, {
     abortEarly: false,
     stripUnknown: true,
   });
   if (error) {
-    const messages = error.details.map((d) => d.message);
-    res.status(400).json({ message: "Invalid payload", details: messages });
+    const details = error.details.map((d: ValidationErrorItem) => d.message);
+    res.status(400).json({ message: "Invalid payload", details });
+    return;
   }
 
   try {
-    const employeeId = req.user.id;
     const workingHourId = parseInt(req.params.id, 10);
-    const { day_of_week, specific_date, start_time, end_time } = value;
-
-    logDebug(
-      `Обновление рабочего времени ID: ${workingHourId} для сотрудника ID: ${employeeId}`,
-      { data: value }
-    );
-
-    // Проверка принадлежности записи сотруднику
-    const record = await knex<WorkingHours>(TABLE_REF)
-      .select(`${WH_ALIAS}.id`)
-      .where({ id: workingHourId, employee_id: employeeId })
+    const record = await knex<WorkingHours>(WH_TABLE)
+      .where({ id: workingHourId })
       .first();
-
     if (!record) {
-      logDebug(
-        `Рабочее время ID: ${workingHourId} не найдено для сотрудника ID: ${employeeId}`
-      );
       res.status(404).json({ message: "Рабочее время не найдено" });
+      return;
+    }
+    if (req.user.role === "employee" && record.employee_id !== req.user.id) {
+      res.status(403).json({ message: "Access denied" });
+      return;
     }
 
-    await knex<WorkingHours>(TABLE_REF)
-      .where(`${WH_ALIAS}.id`, workingHourId)
-      .update({ day_of_week, specific_date, start_time, end_time });
+    await knex<WorkingHours>(WH_TABLE).where({ id: workingHourId }).update({
+      day_of_week: value.day_of_week,
+      specific_date: value.specific_date,
+      start_time: value.start_time,
+      end_time: value.end_time,
+    });
 
-    const updated = await knex<WorkingHours>(TABLE_REF)
-      .select(
-        `${WH_ALIAS}.id`,
-        `${WH_ALIAS}.employee_id`,
-        `${WH_ALIAS}.day_of_week`,
-        `${WH_ALIAS}.specific_date`,
-        `${WH_ALIAS}.start_time`,
-        `${WH_ALIAS}.end_time`
-      )
-      .where(`${WH_ALIAS}.id`, workingHourId)
+    const updated = await knex<WorkingHours>(WH_TABLE)
+      .where({ id: workingHourId })
       .first();
-
-    // Явная обработка undefined после .first()
     if (!updated) {
-      res.status(404).json({ message: "Обновленное рабочее время не найдено" });
+      res.status(404).json({ message: "Обновленное время не найдено" });
+      return;
     }
 
-    logDebug(
-      `Рабочее время ID: ${workingHourId} успешно обновлено для сотрудника ID: ${employeeId}`,
-      { updated }
-    );
-
+    logDebug(`Обновлено рабочее время ID: ${workingHourId}`, { updated });
     res
       .status(200)
       .json({ message: "Рабочее время успешно обновлено", updated });
   } catch (err) {
     logger.error(
-      `Ошибка при обновлении рабочего времени ID: ${req.params.id} для сотрудника ID: ${req.user.id}`,
-      { error: err }
+      `Ошибка при обновлении рабочего времени ID: ${req.params.id}`,
+      {
+        error: err,
+      }
     );
     next(err);
   }
@@ -252,40 +234,27 @@ export const deleteWorkingHours = async (
   next: NextFunction
 ) => {
   try {
-    const employeeId = req.user.id;
     const workingHourId = parseInt(req.params.id, 10);
-
-    logDebug(
-      `Удаление рабочего времени ID: ${workingHourId} для сотрудника ID: ${employeeId}`
-    );
-
-    // Проверка принадлежности записи сотруднику
-    const record = await knex<WorkingHours>(TABLE_REF)
-      .select(`${WH_ALIAS}.id`)
-      .where({ id: workingHourId, employee_id: employeeId })
+    const record = await knex<WorkingHours>(WH_TABLE)
+      .where({ id: workingHourId })
       .first();
-
     if (!record) {
-      logDebug(
-        `Рабочее время ID: ${workingHourId} не найдено для сотрудника ID: ${employeeId}`
-      );
       res.status(404).json({ message: "Рабочее время не найдено" });
+      return;
+    }
+    if (req.user.role === "employee" && record.employee_id !== req.user.id) {
+      res.status(403).json({ message: "Access denied" });
+      return;
     }
 
-    await knex<WorkingHours>(TABLE_REF)
-      .where(`${WH_ALIAS}.id`, workingHourId)
-      .del();
+    await knex<WorkingHours>(WH_TABLE).where({ id: workingHourId }).del();
 
-    logDebug(
-      `Рабочее время ID: ${workingHourId} успешно удалено для сотрудника ID: ${employeeId}`
-    );
-
+    logDebug(`Удалено рабочее время ID: ${workingHourId}`);
     res.status(200).json({ message: "Рабочее время успешно удалено" });
   } catch (err) {
-    logger.error(
-      `Ошибка при удалении рабочего времени ID: ${req.params.id} для сотрудника ID: ${req.user.id}`,
-      { error: err }
-    );
+    logger.error(`Ошибка при удалении рабочего времени ID: ${req.params.id}`, {
+      error: err,
+    });
     next(err);
   }
 };
