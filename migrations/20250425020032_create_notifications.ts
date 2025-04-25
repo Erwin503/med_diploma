@@ -11,6 +11,7 @@ export async function up(knex: Knex): Promise<void> {
       .inTable("Users")
       .onDelete("CASCADE"); // связь с пользователем
     table.string("title").notNullable(); // заголовок
+    table.enu("status", ["email", "internal"]).notNullable(); // тпи уведомления
     table.text("message").nullable(); // сообщение (необязательно)
     table.boolean("read").notNullable().defaultTo(false); // статус прочтения
     table.timestamp("created_at").defaultTo(knex.fn.now()); // дата создания

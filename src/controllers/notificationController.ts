@@ -63,13 +63,15 @@ export const sendBookingConfirmationEmail = async (
     sessionId,
     user.name || "Клиент"
   );
-
-  await sendEmail(user.email, subject, html, "Запись в очередь");
+  const title = "Запись в очередь";
+  await createNotification(user.id, title, "email", html);
+  await sendEmail(user.email, subject, html, title);
 };
 
 export const createNotification = async (
   userId: number,
   title: string,
+  type: string,
   message?: string
 ) => {
   try {
@@ -77,6 +79,7 @@ export const createNotification = async (
       user_id: userId,
       title,
       message,
+      type,
     });
   } catch (err) {
     logger.error("Ошибка создания уведомления", { error: err });
