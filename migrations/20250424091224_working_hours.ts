@@ -22,6 +22,7 @@ export async function up(knex: Knex): Promise<void> {
     table.date("specific_date");
     table.time("start_time").notNullable();
     table.time("end_time").notNullable();
+    table.boolean("requires_confirmation").notNullable().defaultTo(false); // нужно ли подтверждать, что пользоватлея записали
     table
       .enu("status", ["available", "booked"])
       .notNullable()

@@ -25,9 +25,15 @@ export const up = async function (knex: Knex) {
       .inTable("Districts")
       .onDelete("CASCADE"); // Ссылка на отдел
     table
-      .enu("status", ["booked", "completed", "canceled"])
+      .enu("status", [
+        "pending_confirmation",
+        "booked",
+        "in_progress",
+        "completed",
+        "canceled",
+      ])
       .notNullable()
-      .defaultTo("booked"); // Статус сессии
+      .defaultTo("pending_confirmation"); // Статус сессии
     table.text("comments").nullable(); // Комментарии
     table.timestamp("created_at").defaultTo(knex.fn.now());
     table.timestamp("updated_at").defaultTo(knex.fn.now());
