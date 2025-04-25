@@ -1,17 +1,29 @@
 import express from "express";
-import userRoutes from "./authRouter";
-import districtRoutes from "./districtRouter";
+import userRoutes from "./authRoutes";
+import districtRoutes from "./districtRoutes";
 import workingHoursRoutes from "./workingHoursRoutes";
 import sessionsRoutes from "./sessionsRoutes";
 import employeeDetailsRoutes from "./employeeDetailsRoutes";
+import adminRouter from "./adminRoutes";
+import categoryRoutes from "./categoriesRouter";
+import dirRoutes from "./dirRouter";
 
 const router = express.Router();
 
 // Подключение маршрутов для пользователей
 router.use("/users", userRoutes);
 
-// Подключение маршрутов для залов
+// админское управление пользователями
+router.use("/admin", adminRouter)
+
+// Подключение маршрутов для отделов
 router.use("/districts", districtRoutes);
+
+// Подключение маршрутов для категорий
+router.use("/categories", categoryRoutes);
+
+// Подключение маршрутов для категорий
+router.use("/dir", dirRoutes);
 
 // Подключение маршрутов для информации о сотрудниках
 router.use("/employee-details", employeeDetailsRoutes);

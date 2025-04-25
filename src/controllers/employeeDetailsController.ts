@@ -5,9 +5,9 @@ import logger from "../utils/logger";
 import { AuthRequest } from "../middleware/authMiddleware";
 import Joi from "joi";
 
-// Константы для таблицы и алиаса
+// Таблицы и алиасы
 const USERS_TABLE = "Users";
-const EMP_DETAILS_TABLE = "EmployeesDetails";
+const EMP_DETAILS_TABLE = "EmployeeDetails";
 const EMP_ALIAS = "e";
 const TABLE_EMP = `${EMP_DETAILS_TABLE} as ${EMP_ALIAS}`;
 
@@ -17,9 +17,10 @@ const logDebug = (msg: string, meta?: any) => {
   if (isDev) logger.debug(msg, meta);
 };
 
-// Схема валидации данных сотрудника
+// Схема валидации
 const employeeDetailsSchema = Joi.object({
   user_id: Joi.number().integer(),
+  district_id: Joi.number().integer().required(),
   specialization: Joi.string().optional(),
   experience_years: Joi.number().integer().min(0).optional(),
   bio: Joi.string().optional(),
@@ -43,60 +44,57 @@ export const addEmployeeDetails = async (
     return;
   }
 
-  // Определяем целевого пользователя
-  let targetId: number;
-  if (["super_admin", "local_admin"].includes(req.user.role)) {
-    if (!value.user_id) {
-      res.status(400).json({ message: "user_id is required for admins" });
+  // Определяем, для какого user_id и какой department_id
+  let targetUserId: number;
+  let targetDistrictId: number;
+
+  if (req.user.role === "super_admin") {
+    // супер-админ берёт и user_id и district_id из тела
+    targetUserId = value.user_id!;
+    targetDistrictId = value.district_id;
+  } else if (req.user.role === "local_admin") {
+    // локальный админ берёт user_id из body, но district_id из своих деталей
+    targetUserId = value.user_id!;
+    const adminDetail = await knex<EmployeeDetails>(TABLE_EMP)
+      .where(`${EMP_ALIAS}.user_id`, req.user.id)
+      .first();
+    if (!adminDetail) {
+      res.status(403).json({ message: "Local admin has no assigned department" });
       return;
     }
-    targetId = value.user_id;
+    targetDistrictId = adminDetail.district_id;
   } else if (req.user.role === "employee") {
-    targetId = req.user.id;
+    // сотрудник может добавить только себе
+    targetUserId = req.user.id;
+    targetDistrictId = value.district_id;
   } else {
     res.status(403).json({ message: "Access denied" });
     return;
   }
 
   try {
-    logDebug(`Добавление информации о сотруднике для ID=${targetId}`, {
-      value,
-    });
-
-    // Проверяем существование пользователя
-    const user = await knex<User>(USERS_TABLE).where("id", targetId).first();
-    if (!user) {
-      res.status(404).json({ message: "User not found" });
-      return;
-    }
-    if (user.role !== "employee") {
-      res
-        .status(403)
-        .json({ message: `User role ${user.role} is not employee` });
-      return;
-    }
-
-    // Проверяем, нет ли уже деталей
-    const existing = await knex<EmployeeDetails>(TABLE_EMP)
-      .where(`${EMP_ALIAS}.user_id`, targetId)
+    logDebug(`Checking district existence: ${targetDistrictId}`);
+    const districtExists = await knex("Districts")
+      .where({ id: targetDistrictId })
       .first();
-    if (existing) {
-      res.status(409).json({ message: "Employee details already exist" });
+    if (!districtExists) {
+      res.status(404).json({ message: "District not found" });
       return;
     }
 
-    // Вставляем
+    logDebug(`Adding details for user ${targetUserId} in district ${targetDistrictId}`, { value });
     const [details] = await knex<EmployeeDetails>(EMP_DETAILS_TABLE)
       .insert({
-        user_id: targetId,
+        user_id: targetUserId,
+        district_id: targetDistrictId,
         specialization: value.specialization,
         experience_years: value.experience_years,
         bio: value.bio,
         certifications: value.certifications,
       })
-      .returning(["*"]);
+      .returning("*");
 
-    logDebug(`Employee details added for ID=${targetId}`, { details });
+    logDebug(`EmployeeDetails added: ${details.id}`, { details });
     res.status(201).json({ message: "Employee details added", details });
   } catch (err) {
     logger.error("Error adding employee details", { error: err });
