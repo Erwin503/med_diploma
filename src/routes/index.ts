@@ -7,6 +7,7 @@ import employeeDetailsRoutes from "./employeeDetailsRoutes";
 import adminRouter from "./adminRoutes";
 import categoryRoutes from "./categoriesRouter";
 import dirRoutes from "./dirRouter";
+import statRouter from "./statisticsRouter";
 
 const router = express.Router();
 
@@ -31,5 +32,7 @@ router.use("/employee-details", employeeDetailsRoutes);
 router.use("/working-hours", workingHoursRoutes); // CRUD для рабочих часов сотрудника
 
 router.use("/sessions", sessionsRoutes); // CRUD для записей
+
+router.use("/stats", statRouter); // CRUD для записей
 
 export default router;

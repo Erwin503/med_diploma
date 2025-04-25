@@ -99,15 +99,15 @@ DELETE /categories/:id
 
 Directions:
 
-GET /directions
+GET /dir
 
-GET /directions/:id
+GET /dir/:id
 
-POST /directions
+POST /dir
 
-PUT /directions/:id
+PUT /dir/:id
 
-DELETE /directions/:id
+DELETE /dir/:id
 
 Working Hours:
 
