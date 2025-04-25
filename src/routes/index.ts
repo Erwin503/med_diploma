@@ -5,6 +5,7 @@ import workingHoursRoutes from "./workingHoursRoutes";
 import sessionsRoutes from "./sessionsRoutes";
 import employeeDetailsRoutes from "./employeeDetailsRoutes";
 import adminRouter from "./adminRoutes";
+import categoryRoutes from "./categoriesRouter";
 
 const router = express.Router();
 
@@ -14,8 +15,11 @@ router.use("/users", userRoutes);
 // админское управление пользователями
 router.use("/admin", adminRouter)
 
-// Подключение маршрутов для залов
+// Подключение маршрутов для отделов
 router.use("/districts", districtRoutes);
+
+// Подключение маршрутов для категорий
+router.use("/categories", categoryRoutes);
 
 // Подключение маршрутов для информации о сотрудниках
 router.use("/employee-details", employeeDetailsRoutes);
