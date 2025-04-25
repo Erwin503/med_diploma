@@ -4,6 +4,13 @@ import { AuthRequest } from "../middleware/authMiddleware";
 import logger from "../utils/logger";
 import Joi, { ValidationErrorItem } from "joi";
 
+import { Knex } from "knex";
+import { SessionStatus } from "../enum/sessionEnum";
+import {
+  createNotification,
+  sendBookingConfirmationEmail,
+} from "./notificationController";
+
 // Включаем подробное логирование в dev
 const isDev = process.env.NODE_ENV === "development";
 const logDebug = (msg: string, meta?: any) => {
@@ -38,7 +45,9 @@ export const bookSession = async (
   const trx = await knex.transaction();
   try {
     // Проверяем направление
-    const direction = await trx("Directions").where({ id: direction_id }).first();
+    const direction = await trx("Directions")
+      .where({ id: direction_id })
+      .first();
     if (!direction) {
       res.status(404).json({ message: "Direction not found" });
       await trx.rollback();
@@ -66,7 +75,7 @@ export const bookSession = async (
       district_id,
       direction_id,
       working_hour_id,
-      status: "booked",
+      status: SessionStatus.BOOKED,
       created_at: trx.fn.now(),
       updated_at: trx.fn.now(),
     });
@@ -79,6 +88,7 @@ export const bookSession = async (
     await trx.commit();
 
     logDebug("Session booked", { sessionId, working_hour_id, direction_id });
+    await sendBookingConfirmationEmail(req.user.id, sessionId);
     res.status(201).json({ message: "Session booked", sessionId });
   } catch (err) {
     await trx.rollback();
@@ -102,7 +112,7 @@ export const completeSession = async (
     const updatedCount = await trx("Sessions")
       .where({ id: sessionId })
       .update({
-        status: "completed",
+        status: SessionStatus.COMPLETED,
         comments: comments || null,
         updated_at: trx.fn.now(),
       });
@@ -129,14 +139,15 @@ export const completeSession = async (
       .update({ status: "available", updated_at: trx.fn.now() });
 
     await trx.commit();
-    res.status(200).json({ message: "Session completed and working hour released" });
+    res
+      .status(200)
+      .json({ message: "Session completed and working hour released" });
   } catch (err) {
     await trx.rollback();
     logger.error("Error completing session", { error: err });
     next(err);
   }
 };
-
 // Отмена сессии
 export const cancelSession = async (
   req: AuthRequest,
@@ -148,12 +159,10 @@ export const cancelSession = async (
     const sessionId = parseInt(req.params.id, 10);
 
     // Обновляем статус
-    const updatedCount = await trx("Sessions")
-      .where({ id: sessionId })
-      .update({
-        status: "canceled",
-        updated_at: trx.fn.now(),
-      });
+    const updatedCount = await trx("Sessions").where({ id: sessionId }).update({
+      status: SessionStatus.CANCELED,
+      updated_at: trx.fn.now(),
+    });
     if (!updatedCount) {
       res.status(404).json({ message: "Session not found" });
       await trx.rollback();
@@ -177,7 +186,9 @@ export const cancelSession = async (
       .update({ status: "available", updated_at: trx.fn.now() });
 
     await trx.commit();
-    res.status(200).json({ message: "Session canceled and working hour released" });
+    res
+      .status(200)
+      .json({ message: "Session canceled and working hour released" });
   } catch (err) {
     await trx.rollback();
     logger.error("Error canceling session", { error: err });
@@ -214,4 +225,85 @@ export const getUserSessions = async (
     logger.error("Error fetching user sessions", { error: err });
     next(err);
   }
+};
+
+export const changeStatusSession = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  const { status: newStatus } = req.body;
+  const sessionId = parseInt(req.params.id, 10);
+
+  const user = req.user;
+
+  if (!user || !isEmployee(user.role)) {
+    res.status(403).json({ message: "Доступ только для сотрудников" });
+    return;
+  }
+
+  const trx = await knex.transaction();
+
+  try {
+    // TODO: если нужно — добавить проверку, обслуживает ли сотрудник данную сессию
+
+    const resultId = await updateSessionStatus(newStatus, sessionId, trx);
+
+    if (!resultId) {
+      await trx.rollback();
+      res.status(404).json({ message: "Сессия не найдена" });
+      return;
+    }
+
+    await trx.commit();
+
+    res.status(200).json({
+      message: `Статус сессии обновлён на ${newStatus}`,
+      sessionId: resultId,
+      status: newStatus,
+    });
+
+    // TO DO: Изменить тему и содержание
+    createNotification(
+      user.id,
+      "Смена статуса",
+      "internal",
+      `Здравствуйте, ${user.id}, запись №${sessionId} сменила статус на ${newStatus}!`
+    );
+
+    await sendBookingConfirmationEmail(user.id, sessionId);
+  } catch (err) {
+    await trx.rollback();
+    logger.error("Ошибка при смене статуса", { error: err });
+    next(err);
+  }
+};
+
+const updateSessionStatus = async (
+  status: string,
+  sessionId: number,
+  trx: Knex.Transaction
+): Promise<number | null> => {
+  const session = await trx("Sessions").where({ id: sessionId }).first();
+
+  if (!session) return null;
+
+  await trx("Sessions").where({ id: sessionId }).update({
+    status,
+    updated_at: new Date(),
+  });
+
+  return session.id;
+};
+
+const isEmployee = (role: string): boolean => {
+  return role === "employee";
+};
+
+const isLocalAdmin = (role: string): boolean => {
+  return role === "local_admin";
+};
+
+const isSuperAdmin = (role: string): boolean => {
+  return role === "super_admin";
 };

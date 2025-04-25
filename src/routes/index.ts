@@ -3,6 +3,7 @@ import userRoutes from "./authRoutes";
 import districtRoutes from "./districtRoutes";
 import workingHoursRoutes from "./workingHoursRoutes";
 import sessionsRoutes from "./sessionsRoutes";
+import qrCodeRoutes from "./qrCodeRoutes";
 import employeeDetailsRoutes from "./employeeDetailsRoutes";
 import adminRouter from "./adminRoutes";
 import categoryRoutes from "./categoriesRouter";
@@ -32,6 +33,7 @@ router.use("/employee-details", employeeDetailsRoutes);
 router.use("/working-hours", workingHoursRoutes); // CRUD для рабочих часов сотрудника
 
 router.use("/sessions", sessionsRoutes); // CRUD для записей
+router.use("/qr", qrCodeRoutes); // QR routers
 
 router.use("/stats", statRouter); // CRUD для записей
 

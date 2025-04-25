@@ -20,6 +20,14 @@ router.patch(
 // PATCH /sessions/:id/cancel
 router.patch("/:id/cancel", authenticateToken, sessionController.cancelSession);
 
+// Перевести в другой статус (сотрудник или админ)
+// PATCH /sessions/:id/change-status
+router.patch(
+  "/:id/start",
+  authenticateToken,
+  sessionController.changeStatusSession
+);
+
 // Получение своих сессий (клиент или админ, но только свои записи)
 // GET /sessions
 router.get("/", authenticateToken, sessionController.getUserSessions);
