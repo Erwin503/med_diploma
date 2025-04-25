@@ -6,6 +6,7 @@ import sessionsRoutes from "./sessionsRoutes";
 import employeeDetailsRoutes from "./employeeDetailsRoutes";
 import adminRouter from "./adminRoutes";
 import categoryRoutes from "./categoriesRouter";
+import dirRoutes from "./dirRouter";
 
 const router = express.Router();
 
@@ -20,6 +21,9 @@ router.use("/districts", districtRoutes);
 
 // Подключение маршрутов для категорий
 router.use("/categories", categoryRoutes);
+
+// Подключение маршрутов для категорий
+router.use("/dir", dirRoutes);
 
 // Подключение маршрутов для информации о сотрудниках
 router.use("/employee-details", employeeDetailsRoutes);

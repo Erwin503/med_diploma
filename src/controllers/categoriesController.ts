@@ -187,19 +187,19 @@ export const updateCategory = async (
         .where({ user_id: req.user.id })
         .first();
       if (!adminDet || adminDet.district_id !== existing.district_id) {
-        res.status(403).json({ message: "Not allowed to update this category" });
+        res
+          .status(403)
+          .json({ message: "Not allowed to update this category" });
         return;
       }
     }
 
     // Обновляем
-    await knex<Category>(CATEGORIES_TABLE)
-      .where({ id })
-      .update({
-        name: value.name,
-        description: value.description,
-        district_id: targetDistrictId,
-      });
+    await knex<Category>(CATEGORIES_TABLE).where({ id }).update({
+      name: value.name,
+      description: value.description,
+      district_id: targetDistrictId,
+    });
 
     const updated = await knex<Category>(CATEGORIES_TABLE)
       .select("id", "name", "description", "district_id")
@@ -241,7 +241,9 @@ export const deleteCategory = async (
         .where({ user_id: req.user.id })
         .first();
       if (!adminDet || adminDet.district_id !== existing.district_id) {
-        res.status(403).json({ message: "Not allowed to delete this category" });
+        res
+          .status(403)
+          .json({ message: "Not allowed to delete this category" });
         return;
       }
     }
