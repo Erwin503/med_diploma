@@ -1,8 +1,9 @@
 ## 🚀 Быстрый старт
 
-1. **Создать базу данных**  
+1. **Создать базу данных**
    ```sql
    CREATE DATABASE <название_вашей_бд>;
+   ```
 
 Скопировать шаблон переменных окружения
 
@@ -127,6 +128,14 @@ GET /sessions
 
 POST /sessions
 
-PUT /sessions/:id/complete
+PATCH /sessions/:id/complete
 
-PUT /sessions/:id/cancel
+PATCH /sessions/:id/cancel
+
+PATCH /sessions/:id/change-status
+
+Notification:
+
+GET /notification/:id/read
+
+PUT /notification

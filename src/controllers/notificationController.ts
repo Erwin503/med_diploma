@@ -35,7 +35,8 @@ export const markNotificationRead = async (
       .update({ read: true });
 
     if (!updated) {
-      return res.status(404).json({ message: "Уведомление не найдено" });
+      res.status(404).json({ message: "Уведомление не найдено" });
+      return;
     }
 
     res.status(200).json({ message: "Уведомление прочитано" });

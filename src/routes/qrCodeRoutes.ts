@@ -9,6 +9,5 @@ router.post(
   authenticateToken,
   qrCodeController.generateQrForSession
 );
-router.get("/access/:token", qrCodeController.getSessionFromQrToken); // Публичный
-
+router.get("/access/:token", qrCodeController.getSessionFromQrToken);
 export default router;

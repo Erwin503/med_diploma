@@ -5,10 +5,11 @@ import workingHoursRoutes from "./workingHoursRoutes";
 import sessionsRoutes from "./sessionsRoutes";
 import qrCodeRoutes from "./qrCodeRoutes";
 import employeeDetailsRoutes from "./employeeDetailsRoutes";
-import adminRouter from "./adminRoutes";
+import adminRoutes from "./adminRoutes";
 import categoryRoutes from "./categoriesRouter";
 import dirRoutes from "./dirRouter";
-import statRouter from "./statisticsRouter";
+import statRoutes from "./statisticsRouter";
+import notificationRoutes from "./notificationRoutes";
 
 const router = express.Router();
 
@@ -16,7 +17,7 @@ const router = express.Router();
 router.use("/users", userRoutes);
 
 // админское управление пользователями
-router.use("/admin", adminRouter)
+router.use("/admin", adminRoutes);
 
 // Подключение маршрутов для отделов
 router.use("/districts", districtRoutes);
@@ -32,9 +33,16 @@ router.use("/employee-details", employeeDetailsRoutes);
 
 router.use("/working-hours", workingHoursRoutes); // CRUD для рабочих часов сотрудника
 
-router.use("/sessions", sessionsRoutes); // CRUD для записей
-router.use("/qr", qrCodeRoutes); // QR routers
+// Подключение маршрутов для сессий
+router.use("/sessions", sessionsRoutes);
 
-router.use("/stats", statRouter); // CRUD для записей
+// Подключение маршрутов для QR
+router.use("/qr", qrCodeRoutes);
+
+// Подключение маршрутов для уведомлений и писем
+router.use("/notification", notificationRoutes);
+
+// Подключение маршрутов для статистики
+router.use("/stats", statRoutes);
 
 export default router;
