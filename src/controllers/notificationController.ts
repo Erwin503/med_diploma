@@ -2,9 +2,9 @@ import { Request, Response, NextFunction } from "express";
 import knex from "../db/knex";
 import { AuthRequest } from "../middleware/authMiddleware";
 import logger from "../utils/logger";
-import { mailTransporter } from "../utils/mailService";
+import { sendEmail } from "../utils/mailService";
+import { buildSessionEmailContent } from "../utils/mailService";
 
-// Получить уведомления пользователя
 export const getNotifications = async (
   req: AuthRequest,
   res: Response,
@@ -22,7 +22,6 @@ export const getNotifications = async (
   }
 };
 
-// Отметить уведомление как прочитанное
 export const markNotificationRead = async (
   req: AuthRequest,
   res: Response,
@@ -46,66 +45,26 @@ export const markNotificationRead = async (
   }
 };
 
-export const sendNotificationEmail = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-) => {
-  try {
-    const userId = 1;
-    const user = await knex("Users")
-      .select("id", "email", "name")
-      .where({ id: userId })
-      .first();
-    const userEmail = "ibraimg403@gmail.com";
-    if (!user || !userEmail) {
-      logger.warn("Пользователь не найден или отсутствует email", { userId });
-      return;
-    }
-
-    const mailOptions = {
-      from: `"Система уведомлений" <${process.env.SMTP_USER}>`,
-      to: userEmail,
-      subject: "Тест",
-      text: "Тестируем почту",
-    };
-
-    await mailTransporter.sendMail(mailOptions);
-    logger.info(`Письмо отправлено на ${userEmail}`);
-    res.status(200).json({ message: "Уведомление отправлено на почту" });
-  } catch (err) {
-    logger.error("Ошибка при отправке email: " + err, { error: err });
-  }
-};
-
-export const sendMail = async (
+export const sendBookingConfirmationEmail = async (
   userId: number,
-  title: string,
-  message?: string
-) => {
-  try {
-    const user = await knex("Users")
-      .select("id", "email", "name")
-      .where({ id: userId })
-      .first();
-    const userEmail = "ibraimg403@gmail.com";
-    if (!user || !userEmail) {
-      logger.warn("Пользователь не найден или отсутствует email", { userId });
-      return;
-    }
+  sessionId: number
+): Promise<void> => {
+  const user = await knex("Users")
+    .select("id", "email", "name")
+    .where({ id: userId })
+    .first();
 
-    const mailOptions = {
-      from: `"Система уведомлений" <${process.env.SMTP_USER}>`,
-      to: userEmail,
-      subject: title,
-      text: message || "",
-    };
-
-    await mailTransporter.sendMail(mailOptions);
-    logger.info(`Письмо отправлено на ${userEmail}`);
-  } catch (err) {
-    logger.error("Ошибка при отправке email", { error: err });
+  if (!user || !user.email) {
+    logger.warn("Пользователь не найден или отсутствует email", { userId });
+    return;
   }
+
+  const { subject, html } = await buildSessionEmailContent(
+    sessionId,
+    user.name || "Клиент"
+  );
+
+  await sendEmail(user.email, subject, html, "Запись в очередь");
 };
 
 export const createNotification = async (

@@ -11,7 +11,7 @@ export async function up(knex: Knex): Promise<void> {
       .references("id")
       .inTable("Sessions")
       .onDelete("CASCADE");
-    table.timestamp("expires_at").notNullable();
+    table.timestamp("expires_at").defaultTo(null);
     table.boolean("used").notNullable().defaultTo(false);
     table.timestamp("created_at").defaultTo(knex.fn.now());
   });

@@ -5,7 +5,10 @@ import { AuthRequest } from "../middleware/authMiddleware";
 import logger from "../utils/logger";
 import Joi from "joi";
 import { SessionStatus } from "../enum/sessionEnum";
-import { createNotification, sendMail } from "./notificationController";
+import {
+  createNotification,
+  sendBookingConfirmationEmail,
+} from "./notificationController";
 
 // Таблицы и алиасы
 const WH_TABLE = "WorkingHours";
@@ -83,6 +86,7 @@ export const bookSession = async (
       .update({ status: "booked" });
 
     logDebug("Session booked", { session });
+    await sendBookingConfirmationEmail(clientId, session.id);
     res.status(201).json({ message: "Booked successfully", session });
   } catch (err) {
     logger.error("Error booking session", { error: err });
@@ -282,11 +286,7 @@ export const changeStatusSession = async (
       `Здравствуйте, ${user.id}, запись №${sessionId} сменила статус на ${newStatus}!`
     );
 
-    await sendMail(
-      user.id,
-      "Ваша запись подтверждена",
-      "Сотрудник подтвердил вашу заявку."
-    );
+    await sendBookingConfirmationEmail(user.id, sessionId);
   } catch (err) {
     await trx.rollback();
     logger.error("Ошибка при смене статуса", { error: err });
