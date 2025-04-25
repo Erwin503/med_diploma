@@ -1,8 +1,11 @@
 import { Request, Response, NextFunction } from "express";
 import knex from "../db/knex";
+import { Knex } from "knex";
 import { AuthRequest } from "../middleware/authMiddleware";
 import logger from "../utils/logger";
 import Joi from "joi";
+import { SessionStatus } from "../enum/sessionEnum";
+import { createNotification, sendMail } from "./notificationController";
 
 // Таблицы и алиасы
 const WH_TABLE = "WorkingHours";
@@ -46,7 +49,7 @@ export const bookSession = async (
     res.status(400).json({ message: "Invalid payload", details });
   }
   let clientId: number;
-  if (req.user.role === "super_admin" || req.user.role === "local_admin") {
+  if (isSuperAdmin(req.user.role) || isLocalAdmin(req.user.role)) {
     if (!value.user_id)
       res.status(400).json({ message: "user_id is required for admins" });
     clientId = value.user_id;
@@ -60,7 +63,7 @@ export const bookSession = async (
       .where(`${WH_ALIAS}.id`, value.working_hour_id)
       .first();
     if (!slot) res.status(404).json({ message: "Working hour not found" });
-    if (slot.status === "booked")
+    if (slot.status === SessionStatus.BOOKED)
       res.status(400).json({ message: "Slot already booked" });
 
     // Создаем сессию
@@ -69,7 +72,9 @@ export const bookSession = async (
         user_id: clientId,
         working_hour_id: value.working_hour_id,
         district_id: value.district_id,
-        status: "booked",
+        status: slot.requires_confirmation
+          ? SessionStatus.PENDING_CONFIRMATION
+          : SessionStatus.BOOKED,
       })
       .returning("*");
     // Обновляем слот
@@ -111,20 +116,20 @@ export const completeSession = async (
       await trx.rollback();
       res.status(404).json({ message: "Session not found" });
     }
-    if (req.user.role === "employee" && sess.employee_id !== req.user.id) {
+    if (isEmployee(req.user.role) && sess.employee_id !== req.user.id) {
       await trx.rollback();
       res.status(403).json({ message: "Access denied" });
     }
 
     // Обновляем сессию
     await trx(SESS_TABLE).where({ id: sessionId }).update({
-      status: "completed",
+      status: SessionStatus.COMPLETED,
       training_type: value.training_type,
       comments: value.comments,
       updated_at: new Date(),
     });
     // Освобождаем слот
-    if (sess.status === "booked") {
+    if (sess.status === SessionStatus.COMPLETED) {
       await trx(WH_TABLE)
         .where({ id: sess.working_hour_id })
         .update({ status: "available", updated_at: new Date() });
@@ -161,12 +166,10 @@ export const cancelSession = async (
     const oneDayMs = 24 * 60 * 60 * 1000;
     const slotDate = new Date(`${sess.specific_date}T${sess.start_time}`);
     const now = new Date();
-    const isAdmin =
-      req.user.role === "super_admin" || req.user.role === "local_admin";
-    const isClient =
-      req.user.role !== "employee" && sess.user_id === req.user.id;
+    const isAdmin = isSuperAdmin(req.user.role) || isLocalAdmin(req.user.role);
+    const isClient = !isEmployee(req.user.role) && sess.user_id === req.user.id;
     const isEmployeeOwner =
-      req.user.role === "employee" && sess.employee_id === req.user.id;
+      isEmployee(req.user.role) && sess.employee_id === req.user.id;
     if (!isAdmin) {
       if (!(isClient || isEmployeeOwner)) {
         await trx.rollback();
@@ -181,9 +184,13 @@ export const cancelSession = async (
     }
 
     // Отмена
-    await trx(SESS_TABLE)
-      .where({ id: sessionId })
-      .update({ status: "canceled", updated_at: now });
+    const updated = await updateSessionStatus("canceled", sessionId, trx);
+    if (!updated) {
+      await trx.rollback();
+      res.status(404).json({ message: "Session not found" });
+      return;
+    }
+
     if (sess.status === "booked") {
       await trx(WH_TABLE)
         .where({ id: sess.working_hour_id })
@@ -231,4 +238,87 @@ export const getUserSessions = async (
     logger.error("Error fetching user sessions", { error: err });
     next(err);
   }
+};
+
+export const changeStatusSession = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  const { status: newStatus } = req.body;
+  const sessionId = parseInt(req.params.id, 10);
+
+  const user = req.user;
+
+  if (!user || !isEmployee(user.role)) {
+    res.status(403).json({ message: "Доступ только для сотрудников" });
+    return;
+  }
+
+  const trx = await knex.transaction();
+
+  try {
+    // TODO: если нужно — добавить проверку, обслуживает ли сотрудник данную сессию
+
+    const resultId = await updateSessionStatus(newStatus, sessionId, trx);
+
+    if (!resultId) {
+      await trx.rollback();
+      res.status(404).json({ message: "Сессия не найдена" });
+      return;
+    }
+
+    await trx.commit();
+
+    res.status(200).json({
+      message: `Статус сессии обновлён на ${newStatus}`,
+      sessionId: resultId,
+      status: newStatus,
+    });
+
+    createNotification(
+      user.id,
+      "Смена статуса",
+      `Здравствуйте, ${user.id}, запись №${sessionId} сменила статус на ${newStatus}!`
+    );
+
+    await sendMail(
+      user.id,
+      "Ваша запись подтверждена",
+      "Сотрудник подтвердил вашу заявку."
+    );
+  } catch (err) {
+    await trx.rollback();
+    logger.error("Ошибка при смене статуса", { error: err });
+    next(err);
+  }
+};
+
+const updateSessionStatus = async (
+  status: string,
+  sessionId: number,
+  trx: Knex.Transaction
+): Promise<number | null> => {
+  const session = await trx(SESS_TABLE).where({ id: sessionId }).first();
+
+  if (!session) return null;
+
+  await trx(SESS_TABLE).where({ id: sessionId }).update({
+    status,
+    updated_at: new Date(),
+  });
+
+  return session.id;
+};
+
+const isEmployee = (role: string): boolean => {
+  return role === "employee";
+};
+
+const isLocalAdmin = (role: string): boolean => {
+  return role === "local_admin";
+};
+
+const isSuperAdmin = (role: string): boolean => {
+  return role === "super_admin";
 };
