@@ -21,6 +21,8 @@ export const getAttendanceByDirection = async (
       "Directions"
     ).select("id", "name");
 
+    logger.debug(`directions - ${JSON.stringify(allDirections)}`)
+
     // 2) Считаем посещения по направлениям за последние 7 дней
     const rows: Array<{ name: string; count: string }> = await knex(
       "Sessions as s"
@@ -37,6 +39,7 @@ export const getAttendanceByDirection = async (
     allDirections.forEach(({ name }) => {
       result[name] = 0;
     });
+    logger.debug(`JSON.stringify(rows) - ${JSON.stringify(rows)}`)
 
     // 4) Подставляем реальные значения
     rows.forEach((row) => {

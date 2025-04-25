@@ -47,13 +47,16 @@ export interface District {
 
 // Интерфейс для таблицы Sessions
 export interface Session {
-  id: number;
-  user_id: number; // клиент
-  employee_id: number; // сотрудник
-  direction_id: number; // новое поле
-  date: Date;
+  id?: number;
+  user_id: number;           // Ссылка на клиента
+  employee_id: number;       // Ссылка на сотрудника
+  working_hour_id: number;   // Ссылка на рабочий час
+  district_id: number;       // Ссылка на отдел
+  direction_id: number;      // Ссылка на направление
+  status: 'booked' | 'completed' | 'canceled';
   comments?: string;
-  status: "booked" | "completed" | "canceled";
+  created_at?: Date;
+  updated_at?: Date;
 }
 
 export interface Category {
