@@ -5,6 +5,8 @@ import apiRoutes from "./routes/index"; // Подключение маршрут
 import { logRequests } from "./middleware/logger"; // Middleware для логирования
 import { errorHandler } from "./middleware/errorHandler"; // Middleware для обработки ошибок
 import cors from "cors";
+import swaggerUi from 'swagger-ui-express';
+import { swaggerSpec } from './swagger';
 
 dotenv.config(); // Загрузка переменных окружения из .env
 
@@ -24,6 +26,9 @@ app.use(express.json());
 
 // Middleware для логирования запросов
 app.use(logRequests);
+
+// Swagger UI
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Подключение маршрутов
 app.use("/api", apiRoutes);
