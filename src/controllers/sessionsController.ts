@@ -196,7 +196,6 @@ export const cancelSession = async (
   }
 };
 
-// Получение сессий текущего пользователя
 export const getUserSessions = async (
   req: AuthRequest,
   res: Response,
@@ -204,9 +203,21 @@ export const getUserSessions = async (
 ) => {
   try {
     const userId = req.user.id;
-    const sessions = await knex("Sessions as s")
+
+    const rows = await knex("Sessions as s")
+      // связь с рабочим временем
       .leftJoin("WorkingHours as wh", "s.working_hour_id", "wh.id")
+      // направление
       .leftJoin("Directions as d", "s.direction_id", "d.id")
+      // доктор (пользователь)
+      .leftJoin("Users as u", "wh.employee_id", "u.id")
+      // детали доктора — откуда берем district_id
+      .leftJoin("EmployeeDetails as ed", "u.id", "ed.user_id")
+      // таблица округов/отделов, откуда берем address
+      .leftJoin("Districts as dist", "ed.district_id", "dist.id")
+      .where("s.user_id", userId)
+      .orderBy("wh.specific_date", "asc")
+      .orderBy("wh.start_time", "asc")
       .select(
         "s.id",
         "s.status",
@@ -214,11 +225,27 @@ export const getUserSessions = async (
         "wh.day_of_week",
         "wh.start_time",
         "wh.end_time",
-        "d.name as direction_name"
-      )
-      .where("s.user_id", userId)
-      .orderBy("wh.specific_date", "asc")
-      .orderBy("wh.start_time", "asc");
+        "d.name as direction_name",
+        "u.id as doctor_id",
+        "u.name as doctor_name",
+        "dist.address as address"
+      );
+
+    // формируем вложенный объект doctor и поле address
+    const sessions = rows.map((r) => ({
+      id: r.id,
+      status: r.status,
+      specific_date: r.specific_date,
+      day_of_week: r.day_of_week,
+      start_time: r.start_time,
+      end_time: r.end_time,
+      direction_name: r.direction_name,
+      doctor: {
+        id: r.doctor_id,
+        name: r.doctor_name,
+      },
+      address: r.address, // адрес округа/отдела
+    }));
 
     res.status(200).json(sessions);
   } catch (err) {
