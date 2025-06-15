@@ -45,7 +45,7 @@ const router = express.Router();
  */
 
 // Защита всех маршрутов авторизацией и проверкой роли
-router.use(authenticateToken, checkRole(["local_admin", "super_admin"]));
+// router.use(authenticateToken, checkRole(["local_admin", "super_admin"]));
 
 /**
  * @openapi
@@ -66,7 +66,7 @@ router.use(authenticateToken, checkRole(["local_admin", "super_admin"]));
  *               items:
  *                 $ref: '#/components/schemas/UserSummary'
  */
-router.get("/", getAllUsers);
+router.get("/",authenticateToken, checkRole(["local_admin", "super_admin"]), getAllUsers);
 
 /**
  * @openapi
@@ -93,7 +93,7 @@ router.get("/", getAllUsers);
  *       '404':
  *         description: Пользователь не найден
  */
-router.get("/:id", getUserById);
+router.get("/:id", authenticateToken, checkRole(["local_admin", "super_admin"]), getUserById);
 
 /**
  * @openapi
@@ -131,7 +131,7 @@ router.get("/:id", getUserById);
  *       '404':
  *         description: Пользователь не найден
  */
-router.put("/:id", updateUserByAdmin);
+router.put("/:id", authenticateToken, checkRole(["local_admin", "super_admin"]), updateUserByAdmin);
 
 /**
  * @openapi
@@ -154,7 +154,7 @@ router.put("/:id", updateUserByAdmin);
  *       '404':
  *         description: Пользователь не найден
  */
-router.delete("/:id", deleteUserByAdmin);
+router.delete("/:id", authenticateToken, checkRole(["local_admin", "super_admin"]), deleteUserByAdmin);
 
 /**
  * @openapi
@@ -177,7 +177,7 @@ router.delete("/:id", deleteUserByAdmin);
  *       '400':
  *         description: Ошибка валидации или пользователь не найден
  */
-router.post("/assign-role", assignRoleToUser);
+router.post("/assign-role", authenticateToken, checkRole(["local_admin", "super_admin"]), assignRoleToUser);
 
 /**
  * @openapi
