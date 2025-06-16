@@ -215,7 +215,7 @@ export const getUserSessions = async (
       .leftJoin("EmployeeDetails as ed", "u.id", "ed.user_id")
       // таблица округов/отделов, откуда берем address
       .leftJoin("Districts as dist", "ed.district_id", "dist.id")
-      .where("s.user_id", userId)
+      // .where("s.user_id", userId)
       .orderBy("wh.specific_date", "asc")
       .orderBy("wh.start_time", "asc")
       .select(
@@ -232,6 +232,7 @@ export const getUserSessions = async (
       );
 
     // формируем вложенный объект doctor и поле address
+    logger.debug(rows)
     const sessions = rows.map((r) => ({
       id: r.id,
       status: r.status,

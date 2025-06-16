@@ -1,103 +1,107 @@
 import { Knex } from 'knex';
 import bcrypt from 'bcryptjs';
-import { User } from "../src/interfaces/model";
-import logger from "../src/utils/logger";  
+import { User } from '../src/interfaces/model';
+import logger from '../src/utils/logger';
 
 /**
- * Добавляет одного супер-админа, если он ещё не существует.
+ * Сид для добавления супер-админа, локальных админов, сотрудников и пациентов.
  */
 export async function seed(knex: Knex): Promise<void> {
-  // Проверяем, есть ли уже супер-админ
-  const exists = await knex<User>('Users')
+  // 1) Super Admin
+  const superAdmin = await knex<User>('Users')
     .where({ role: 'super_admin' })
     .first();
-
-  if (exists) {
-    logger.info('Super admin already exists, skipping seed.');
-    return;
+  if (!superAdmin) {
+    const hash = bcrypt.hashSync('ChangeMe123!', 10);
+    await knex<Partial<User>>('Users').insert({
+      name: 'Супер Админ',
+      email: 'superadmin@hospital.ru',
+      password_hash: hash,
+      phone: '+7 (777) 777-77-77',
+      role: 'super_admin',
+    });
+    logger.info('Seeded Super Admin');
+  } else {
+    logger.info('Super Admin exists, skipping');
   }
 
-  // Параметры нового супер-админа
-  const name = 'Super Admin';
-  const email = 'superadmin@example.com';
-  const rawPassword = 'ChangeMe123!';
-  const phone = "+777 777 77 77";
-  const role = 'super_admin';
-
-  // Хешируем пароль
-  const password_hash = bcrypt.hashSync(rawPassword, 10);
-
-  // Вставляем в базу
-  await knex<Partial<User>>('Users').insert({
-    name,
-    email,
-    password_hash,
-    phone,
-    role,
-  });
-
-  logger.info(`Super admin seeded: ${email}`);
-
-  // Seed Local Admins
+  // 2) Local Admins
   const localAdmins = [
-    { name: 'Local Admin 1', email: 'localadmin1@example.com', rawPassword: 'LocalPass1!', phone: "+777 777 77 77" },
-    { name: 'Local Admin 2', email: 'localadmin2@example.com', rawPassword: 'LocalPass2!', phone: "+777 777 77 77" }
+    { name: 'Алексей Иванов', email: 'ivanov.a@hospital.ru', rawPassword: 'LocalPass1!', phone: '+7 (700) 111-11-11' },
+    { name: 'Марина Петрова', email: 'petrova.m@hospital.ru', rawPassword: 'LocalPass2!', phone: '+7 (700) 222-22-22' }
   ];
   for (const admin of localAdmins) {
-    const existsAdmin = await knex<User>('Users').where({ email: admin.email }).first();
-    if (!existsAdmin) {
+    const exists = await knex<User>('Users').where({ email: admin.email }).first();
+    if (!exists) {
       const hash = bcrypt.hashSync(admin.rawPassword, 10);
       await knex<Partial<User>>('Users').insert({
         name: admin.name,
         email: admin.email,
         password_hash: hash,
         phone: admin.phone,
-        role: 'local_admin'
+        role: 'local_admin',
       });
-      logger.info(`Local admin seeded: ${admin.email}`);
+      logger.info(`Seeded Local Admin: ${admin.email}`);
     }
   }
 
-  // Seed Employees
+  // 3) Employees: 2 per department (10 departments)
   const employees = [
-    { name: 'Employee One', email: 'employee1@example.com', rawPassword: 'EmpPass1!', phone: "+777 777 77 77" },
-    { name: 'Employee Two', email: 'employee2@example.com', rawPassword: 'EmpPass2!', phone: "+777 777 77 77" },
-    { name: 'Employee Three', email: 'employee3@example.com', rawPassword: 'EmpPass3!', phone: "+777 777 77 77" }
+    'Ольга Смирнова', 'Дмитрий Козлов',
+    'Екатерина Попова', 'Иван Волков',
+    'Наталья Соколова', 'Сергей Лебедев',
+    'Виктория Новикова', 'Андрей Морозов',
+    'Юлия Фёдорова', 'Павел Киселёв',
+    'Анна Павлова', 'Михаил Семёнов',
+    'Елена Васильева', 'Александр Дмитриев',
+    'Татьяна Михайлова', 'Роман Новосёлов',
+    'Ирина Орлова', 'Алексей Захаров',
+    'Оксана Кузнецова', 'Николай Павленко'
   ];
-  for (const emp of employees) {
-    const existsEmp = await knex<User>('Users').where({ email: emp.email }).first();
-    if (!existsEmp) {
-      const hash = bcrypt.hashSync(emp.rawPassword, 10);
+  let empCount = 0;
+  for (const name of employees) {
+    empCount++;
+    const email = `emp${empCount}@hospital.ru`;
+    const phone = `+7 (900) ${100 + empCount}-${10 + empCount}-${20 + empCount}`;
+    const rawPassword = `EmpPass${empCount}!`;
+
+    const exists = await knex<User>('Users').where({ email }).first();
+    if (!exists) {
+      const hash = bcrypt.hashSync(rawPassword, 10);
       await knex<Partial<User>>('Users').insert({
-        name: emp.name,
-        email: emp.email,
+        name,
+        email,
         password_hash: hash,
-        phone: emp.phone,
-        role: 'employee'
+        phone,
+        role: 'employee',
       });
-      logger.info(`Employee seeded: ${emp.email}`);
+      logger.info(`Seeded Employee: ${email}`);
     }
   }
 
-  // Seed Clients
-  const clients = [
-    { name: 'Client One', email: 'client1@example.com', rawPassword: 'ClientPass1!', phone: "+777 777 77 77" },
-    { name: 'Client Two', email: 'client2@example.com', rawPassword: 'ClientPass2!', phone: "+777 777 77 77" },
-    { name: 'Client Three', email: 'client3@example.com', rawPassword: 'ClientPass3!', phone: "+777 777 77 77" },
-    { name: 'Client Four', email: 'client4@example.com', rawPassword: 'ClientPass4!', phone: "+777 777 77 77" }
+  // 4) Patients: 10 users
+  const patients = [
+    'Артём Смирнов', 'Дарья Лебедева', 'Константин Новиков',
+    'Светлана Морозова', 'Олег Фёдоров', 'Мария Васильева',
+    'Владимир Захаров', 'Елена Киселёва', 'Пётр Орлов', 'Ирина Павленко'
   ];
-  for (const client of clients) {
-    const existsClient = await knex<User>('Users').where({ email: client.email }).first();
-    if (!existsClient) {
-      const hash = bcrypt.hashSync(client.rawPassword, 10);
+  for (let i = 0; i < patients.length; i++) {
+    const name = patients[i];
+    const email = `patient${i + 1}@example.com`;
+    const phone = `+7 (910) ${200 + i + 1}-${30 + i + 1}-${40 + i + 1}`;
+    const rawPassword = `PatientPass${i + 1}!`;
+
+    const exists = await knex<User>('Users').where({ email }).first();
+    if (!exists) {
+      const hash = bcrypt.hashSync(rawPassword, 10);
       await knex<Partial<User>>('Users').insert({
-        name: client.name,
-        email: client.email,
+        name,
+        email,
         password_hash: hash,
-        phone: client.phone,
-        role: 'user'
+        phone,
+        role: 'user',
       });
-      logger.info(`Client seeded: ${client.email}`);
+      logger.info(`Seeded Patient: ${email}`);
     }
   }
 }
