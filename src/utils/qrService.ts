@@ -12,7 +12,7 @@ export const generateSessionQrCode = async (sessionId: number) => {
     process.env.BASE_URL || "http://localhost:3000"
   }/api/qr/access/${token}`;
 
-  await knex("queueqrtokens").insert({
+  await knex("QueueQrTokens").insert({
     token,
     session_id: sessionId,
     expires_at: expiresAt,
