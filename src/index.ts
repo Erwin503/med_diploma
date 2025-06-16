@@ -15,7 +15,7 @@ const port = process.env.PORT || 3000;
 
 app.use(
   cors({
-    origin: "http://localhost:5173", // Укажите адрес вашего клиента
+    origin: "*", // Укажите адрес вашего клиента
     methods: ["GET", "POST", "PUT", "DELETE"], // Разрешённые HTTP-методы
     credentials: true, // Если требуется отправка cookie
   })
